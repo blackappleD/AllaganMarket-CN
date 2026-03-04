@@ -23,14 +23,14 @@ public class InventoryService(
     IRetainerService retainerService) : IInventoryService, IDisposable
 {
     [Signature(
-        "48 89 6C 24 ?? 48 89 74 24 ?? 57 48 81 EC ?? ?? ?? ?? 41 0F B7 40 ??",
+        "48 89 74 24 ?? 57 48 81 EC ?? ?? ?? ?? 44 0F B7 42 ??",
         DetourName = nameof(ContainerInfoDetour),
         UseFlags = SignatureUseFlags.Hook)]
     private readonly Hook<ContainerInfoNetworkData>? containerInfoNetworkHook = null;
     private readonly HashSet<uint> loadedInventories = [];
     private ulong currentRetainer;
 
-    private unsafe delegate void* ContainerInfoNetworkData(nint networkInstance, int a2, int* a3);
+    private unsafe delegate void* ContainerInfoNetworkData(int a2, int* a3);
 
     public event IInventoryService.RetainerInventoryLoadedDelegate? OnRetainerInventoryLoaded;
 
@@ -114,7 +114,7 @@ public class InventoryService(
         return Task.CompletedTask;
     }
 
-    private unsafe void* ContainerInfoDetour(nint networkInstance, int seq, int* a3)
+    private unsafe void* ContainerInfoDetour(int seq, int* a3)
     {
         try
         {
@@ -140,6 +140,6 @@ public class InventoryService(
             this.PluginLog.Error(e, "Something went wrong while decoding the container info");
         }
 
-        return this.containerInfoNetworkHook!.Original(networkInstance, seq, a3);
+        return this.containerInfoNetworkHook!.Original(seq, a3);
     }
 }
