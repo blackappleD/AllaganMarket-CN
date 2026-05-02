@@ -14,7 +14,7 @@ public class AddDtrBarEntrySetting(ImGuiService imGuiService) : BooleanFormField
     public override string HelpText { get; set; } =
         "Adds a entry to the server info bar that informs you of the number of items you have for sale that have been undercut.";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public SettingType Type { get; set; } = SettingType.Features;
 

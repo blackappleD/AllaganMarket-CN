@@ -5,8 +5,6 @@ using Dalamud.Plugin.Services;
 
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
-using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.ValueType;
-
 namespace AllaganMarket.Services;
 
 public interface IAtkOrderService

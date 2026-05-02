@@ -20,6 +20,7 @@ using FFXIVClientStructs.FFXIV.Common.Math;
 
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Colors;
+using Dalamud.Interface.Windowing;
 
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
@@ -284,12 +285,9 @@ public class RetainerSellOverlayWindow : OverlayWindow
 
             if (ImGui.IsItemHovered())
             {
-                using (var tooltip = ImRaii.Tooltip())
+                using (ImRaii.Tooltip())
                 {
-                    if (tooltip)
-                    {
-                        ImGui.Text($"Sourced From: {marketCache?.GetFormattedType() ?? "N/A"}");
-                    }
+                    ImGui.Text($"Sourced From: {marketCache?.GetFormattedType() ?? "N/A"}");
                 }
             }
         }

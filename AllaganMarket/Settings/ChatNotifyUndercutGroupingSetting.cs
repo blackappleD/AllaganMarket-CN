@@ -22,7 +22,7 @@ public class ChatNotifyUndercutGroupingSetting : EnumFormField<ChatNotifyUndercu
     public override string HelpText { get; set; } =
         "When multiple undercuts occur, how should these be grouped together?";
 
-    public override string Version => "1.0.0.1";
+    public override string Version { get; set; } = "1.0.0.1";
 
     public override bool Equal(Enum item1, Enum item2)
     {

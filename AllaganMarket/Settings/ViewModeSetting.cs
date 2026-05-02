@@ -17,7 +17,7 @@ public class ViewModeSetting(ImGuiService imGuiService) : EnumFormField<ViewMode
     public override string HelpText { get; set; } =
         "How should the sales/sold tabs be laid out, in a grid or in a list?";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override bool Equal(Enum item1, Enum item2)
     {

@@ -33,7 +33,7 @@ public class ListedAtColumn(ImGuiService imGuiService, StringColumnFilter string
     public override string HelpText { get; set; } =
         "The date the item was listed on the market.";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
 
     public override DateTime? CurrentDateValue(SearchResult item)

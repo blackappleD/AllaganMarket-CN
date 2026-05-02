@@ -15,7 +15,7 @@ public class HighlightingRetainerListSetting(ImGuiService imGuiService)
     public override string HelpText { get; set; } =
         "Should the retainer list be highlighted for undercuts and updates?";
 
-    public override string Version { get; } = "1.0.0.3";
+    public override string Version { get; set; } = "1.0.0.3";
 
     public SettingType Type { get; set; } = SettingType.Highlighting;
 

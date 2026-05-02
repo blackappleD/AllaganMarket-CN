@@ -18,7 +18,7 @@ public class UndercutAllowFallbackSetting : BooleanFormField<Configuration>, ISe
     public override string HelpText { get; set; } =
         "When determining if you have been undercut and there are no listings for the quality selected, should AT fallback to using a price from the other quality. i.e. there are no HQ entries, it will use NQ entries instead. ";
 
-    public override string Version { get; } = "1.1.0.9";
+    public override string Version { get; set; } = "1.1.0.9";
 
     public SettingType Type { get; set; } = SettingType.Undercutting;
 

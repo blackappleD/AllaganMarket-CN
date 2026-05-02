@@ -23,7 +23,7 @@ public class ChatNotifySoldItemChatTypeSetting : XivChatTypeFormField, ISetting
     public override string HelpText { get; set; } =
         "If `Show chat messages on sale of item` is enabled, which chat channel should these messages be directed to?";
 
-    public override string Version { get; } = "1.0.0.1";
+    public override string Version { get; set; } = "1.0.0.1";
 
     public SettingType Type { get; set; } = SettingType.Chat;
 

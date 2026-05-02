@@ -13,7 +13,7 @@ public class RetainerOverlayCollapsedSetting(ImGuiService imGuiService) : Boolea
 
     public override string HelpText { get; set; } = "Is the retainer overlay currently collapsed?";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public SettingType Type { get; set; } = SettingType.Overlays;
 

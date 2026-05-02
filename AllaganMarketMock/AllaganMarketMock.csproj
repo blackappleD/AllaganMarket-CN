@@ -1,4 +1,4 @@
-﻿<Project Sdk="Dalamud.NET.Sdk/14.0.1">
+﻿<Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
     <Use_DalamudPackager>false</Use_DalamudPackager>
     <OutputType>Exe</OutputType>
@@ -59,7 +59,7 @@
     <ProjectReference Include="..\AllaganMarket\AllaganMarket.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="DalaMock.Core" Version="4.0.5" />
+    <PackageReference Include="DalaMock.Core" Version="5.0.2" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

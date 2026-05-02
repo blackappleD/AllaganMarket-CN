@@ -21,7 +21,7 @@ public class RoundToSetting : IntegerFormField<Configuration>, ISetting
     public override string HelpText { get; set; } =
         "When displaying a recommended undercut price, this indicates the nearest multiple to which the recommended price is rounded to. Set to 1 if you don't want to round off the recommended pricing.";
 
-    public override string Version { get; } = "1.0.0.1";
+    public override string Version { get; set; } = "1.0.0.1";
 
     public SettingType Type { get; set; } = SettingType.Undercutting;
 

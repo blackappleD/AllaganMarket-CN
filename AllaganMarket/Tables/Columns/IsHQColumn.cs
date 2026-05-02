@@ -26,7 +26,7 @@ public class IsHQColumn(ImGuiService imGuiService)
 
     public override string HelpText { get; set; } = "Is the item high quality?";
 
-    public override string Version => "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override string? CurrentValue(SearchResult item)
     {

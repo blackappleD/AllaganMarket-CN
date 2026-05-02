@@ -33,7 +33,7 @@ public class SoldAtColumn(ImGuiService imGuiService, StringColumnFilter stringCo
     public override string HelpText { get; set; } =
         "When the item was sold.";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override DateTime? CurrentDateValue(SearchResult item)
     {

@@ -77,5 +77,5 @@ public class ItemIconColumn : IconColumn<SearchResultConfiguration, SearchResult
 
     public override string HelpText { get; set; } = "The icon of the item";
 
-    public override string Version { get; } = "1.0.0.2";
+    public override string Version { get; set; } = "1.0.0.2";
 }

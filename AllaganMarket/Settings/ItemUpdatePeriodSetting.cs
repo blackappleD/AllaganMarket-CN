@@ -17,7 +17,7 @@ public class ItemUpdatePeriodSetting(ImGuiService imGuiService)
     public override string HelpText { get; set; } =
         "The plugin will mark items in yellow once their pricing is considered to be stale. How often should the plugin ask you to price check/update the item in minutes? Viewing the current offerings for an item or updating the price of an update will reset this counter.";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public SettingType Type { get; set; } = SettingType.General;
 

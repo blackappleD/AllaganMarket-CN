@@ -34,7 +34,7 @@ public class UndercutByColumn(NumberFormatInfo gilFormat, ImGuiService imGuiServ
 
     public override string HelpText { get; set; } = "How much the item was undercut by.";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override string? CurrentValue(SearchResult item)
     {

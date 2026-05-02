@@ -17,5 +17,5 @@ public class SaleSummaryTimeSpanFormField(ImGuiService imGuiService)
 
     public override string HelpText { get; set; } = string.Empty;
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 }

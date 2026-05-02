@@ -45,7 +45,7 @@ public class NameColumn(
 
     public override string HelpText { get; set; } = "The name of the item";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public string GetFormattedSaleSummaryName(SaleSummaryItem saleSummaryItem)
     {

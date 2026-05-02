@@ -29,7 +29,7 @@ public class QuantityColumn(ImGuiService imGuiService, StringColumnFilter string
 
     public override string HelpText { get; set; } = "The quantity of item being sold.";
 
-    public override string Version => "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override string? CurrentValue(SearchResult item)
     {

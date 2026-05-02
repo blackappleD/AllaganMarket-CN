@@ -68,8 +68,7 @@ public class ImGuiService(IDalamudPluginInterface pluginInterface, ITextureProvi
 
         if (ImGui.IsItemHovered() && !string.IsNullOrEmpty(tooltip))
         {
-            using var tooltipScope = ImRaii.Tooltip();
-            if (tooltipScope)
+            using (ImRaii.Tooltip())
             {
                 ImGui.Text(tooltip);
             }

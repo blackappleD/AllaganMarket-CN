@@ -18,7 +18,7 @@ public class ChatNotifyUndercutCharacterSetting(ImGuiService imGuiService)
     public override string HelpText { get; set; } =
         "If chat messages are enabled for undercuts, should undercuts on active characters be shown or all retainers?";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override bool Equal(Enum item1, Enum item2)
     {

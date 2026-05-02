@@ -33,7 +33,7 @@ public class TaxColumn(NumberFormatInfo gilFormat, ImGuiService imGuiService, St
 
     public override string HelpText { get; set; } = "The total tax paid on the item";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override string? CurrentValue(SearchResult item)
     {

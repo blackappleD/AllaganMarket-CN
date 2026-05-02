@@ -32,6 +32,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin.Services;
 
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Windowing;
 
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
@@ -424,8 +425,7 @@ public class MainWindow : ExtendedWindow
         ImGui.Text("?");
         if (ImGui.IsItemHovered())
         {
-            using var tooltip = ImRaii.Tooltip();
-            if (tooltip)
+            using (ImRaii.Tooltip())
             {
                 ImGui.Text(fieldText);
             }
@@ -437,8 +437,7 @@ public class MainWindow : ExtendedWindow
         ImGui.Text("?");
         if (ImGui.IsItemHovered())
         {
-            using var tooltip = ImRaii.Tooltip();
-            if (tooltip)
+            using (ImRaii.Tooltip())
             {
                 ImGui.Text(fieldText);
                 ImGui.Text("When searching the following operators can be used to compare: ");
@@ -456,8 +455,7 @@ public class MainWindow : ExtendedWindow
         ImGui.Text("?");
         if (ImGui.IsItemHovered())
         {
-            using var tooltip = ImRaii.Tooltip();
-            if (tooltip)
+            using (ImRaii.Tooltip())
             {
                 ImGui.Text(fieldText);
                 ImGui.Text("When searching the following operators can be used to compare: ");
@@ -476,8 +474,7 @@ public class MainWindow : ExtendedWindow
         ImGui.Text("?");
         if (ImGui.IsItemHovered())
         {
-            using var tooltip = ImRaii.Tooltip();
-            if (tooltip)
+            using (ImRaii.Tooltip())
             {
                 ImGui.Text(fieldText);
                 ImGui.Text("When searching the following operators can be used to compare: ");
@@ -610,8 +607,7 @@ public class MainWindow : ExtendedWindow
 
                         if (ImGui.IsItemHovered())
                         {
-                            using var tooltip = ImRaii.Tooltip();
-                            if (tooltip)
+                            using (ImRaii.Tooltip())
                             {
                                 ImGui.Text("Left Click: Select/Unselect");
                                 ImGui.Text("Arrow: Collapse/Uncollapse");
@@ -650,13 +646,10 @@ public class MainWindow : ExtendedWindow
 
                                 if (ImGui.IsItemHovered())
                                 {
-                                    using (var tooltip = ImRaii.Tooltip())
+                                    using (ImRaii.Tooltip())
                                     {
-                                        if (tooltip)
-                                        {
-                                            ImGui.Text("Left Click: Select/Unselect");
-                                            ImGui.Text("Right Click: Menu");
-                                        }
+                                        ImGui.Text("Left Click: Select/Unselect");
+                                        ImGui.Text("Right Click: Menu");
                                     }
 
                                     if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
@@ -714,18 +707,15 @@ public class MainWindow : ExtendedWindow
 
                                         if (retainerHovered || ImGui.IsItemHovered())
                                         {
-                                            using (var tooltip = ImRaii.Tooltip())
+                                            using (ImRaii.Tooltip())
                                             {
-                                                if (tooltip)
-                                                {
-                                                    ImGui.Text(retainer.Name);
-                                                    ImGui.Separator();
-                                                    ImGui.Text(
-                                                        $"Class: {this.classJobSheet.GetRowOrDefault(retainer.ClassJobId)?.Abbreviation.ExtractText() ?? "Unknown Class"}");
-                                                    ImGui.Text($"Level: {retainer.Level}");
-                                                    ImGui.Text("Left Click: Select/Unselect");
-                                                    ImGui.Text("Right Click: Menu");
-                                                }
+                                                ImGui.Text(retainer.Name);
+                                                ImGui.Separator();
+                                                ImGui.Text(
+                                                    $"Class: {this.classJobSheet.GetRowOrDefault(retainer.ClassJobId)?.Abbreviation.ExtractText() ?? "Unknown Class"}");
+                                                ImGui.Text($"Level: {retainer.Level}");
+                                                ImGui.Text("Left Click: Select/Unselect");
+                                                ImGui.Text("Right Click: Menu");
                                             }
 
                                             if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
@@ -1125,8 +1115,7 @@ public class MainWindow : ExtendedWindow
 
                     if (!undercutHovered && (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenOverlapped) || iconHovered))
                     {
-                        using var tooltip = ImRaii.Tooltip();
-                        if (tooltip)
+                        using (ImRaii.Tooltip())
                         {
                             ImGui.Text($"{item.Name.ExtractText()}");
                             ImGui.Text($"{character?.Name ?? "Unknown"}");

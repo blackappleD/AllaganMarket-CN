@@ -37,7 +37,7 @@ public class MarketPriceUpdaterService(IGameInteropProvider gameInteropProvider,
 
     private unsafe delegate void* ItemMarketBoardInfoData(nint networkInstance, int a2, int* a3);
 
-    private delegate nint MarketBoardItemRequestStartPacketHandler(nint a1, nint packetRef);
+    private delegate void MarketBoardItemRequestStartPacketHandler(uint a1, nint packetRef);
 
     public event MarketBoardItemRequestReceivedDelegate? MarketBoardItemRequestReceived;
 
@@ -84,7 +84,7 @@ public class MarketPriceUpdaterService(IGameInteropProvider gameInteropProvider,
         return Task.CompletedTask;
     }
 
-    private unsafe nint ItemRequestStartPacketDetour(nint a1, nint packetRef)
+    private void ItemRequestStartPacketDetour(uint a1, nint packetRef)
     {
         try
         {
@@ -95,6 +95,6 @@ public class MarketPriceUpdaterService(IGameInteropProvider gameInteropProvider,
             this.PluginLog.Error(ex, "ItemRequestStartPacketDetour threw an exception");
         }
 
-        return this.itemRequestStartPacketDetourHook!.OriginalDisposeSafe(a1, packetRef);
+        this.itemRequestStartPacketDetourHook!.OriginalDisposeSafe(a1, packetRef);
     }
 }

@@ -21,7 +21,7 @@ public class RoundUpDownSetting : BooleanFormField<Configuration>, ISetting
 
     public override string HelpText { get; set; } = "Checking this box will round the recommended price UP from the undercut calcuations. You might want to do this if you undercut by a larger number and want a visually pleasing result. Leaving the box unchecked will round DOWN.";
 
-    public override string Version { get; } = "1.0.0.1";
+    public override string Version { get; set; } = "1.0.0.1";
 
     public SettingType Type { get; set; } = SettingType.Undercutting;
 

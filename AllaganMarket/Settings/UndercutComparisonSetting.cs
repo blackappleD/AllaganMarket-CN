@@ -21,7 +21,7 @@ public class UndercutComparisonSetting : EnumFormField<UndercutComparison, Confi
 
     public override string HelpText { get; set; } = "When determining if an item is undercut, which results should be compared against? This can be changed individually per item. Items that cannot be HQ will ignore this setting.";
 
-    public override string Version { get; } = "1.0.0.1";
+    public override string Version { get; set; } = "1.0.0.1";
 
     public override bool Equal(Enum item1, Enum item2)
     {

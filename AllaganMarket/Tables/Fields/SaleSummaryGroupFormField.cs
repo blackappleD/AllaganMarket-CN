@@ -21,7 +21,7 @@ public class SaleSummaryGroupFormField(ImGuiService imGuiService)
 
     public override string HelpText { get; set; } = "What to group the sale summary by";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override bool HideAlreadyPicked { get; set; }
 

@@ -15,7 +15,7 @@ public class ChatNotifyUndercutLoginSetting(ImGuiService imGuiService)
     public override string HelpText { get; set; } =
         "When you first login should the plugin notify you of any undercuts that have occurred on your items?";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public SettingType Type { get; set; } = SettingType.Chat;
 

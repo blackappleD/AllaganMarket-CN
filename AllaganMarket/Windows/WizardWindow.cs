@@ -8,6 +8,7 @@ using AllaganMarket.Services;
 using DalaMock.Host.Mediator;
 
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Windowing;
 
 namespace AllaganMarket.Windows;
 

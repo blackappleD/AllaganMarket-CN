@@ -15,7 +15,7 @@ public class AddTitleMenuButtonSetting(ImGuiService imGuiService)
     public override string HelpText { get; set; } =
         "Should a button to open Allagan Market be added to Dalamud's title menu?";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public SettingType Type { get; set; } = SettingType.Features;
 

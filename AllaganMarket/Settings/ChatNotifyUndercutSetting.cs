@@ -15,7 +15,7 @@ public class ChatNotifyUndercutSetting(ImGuiService imGuiService)
     public override string HelpText { get; set; } =
         "Should a chat message anytime a undercut occurs on an item you are selling?";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public SettingType Type { get; set; } = SettingType.Chat;
 

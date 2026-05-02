@@ -32,7 +32,7 @@ public class WorldColumn(ExcelSheet<World> worldSheet, ImGuiService imGuiService
 
     public override string HelpText { get; set; } = "The world";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override string? CurrentValue(SearchResult item)
     {

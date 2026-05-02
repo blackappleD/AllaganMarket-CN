@@ -14,7 +14,7 @@ public class ChatNotifySoldItemSetting(ImGuiService imGuiService) : BooleanFormF
     public override string HelpText { get; set; } =
         "This will show a message when a sale of an item occurs. At present, this only happens when you view a retainer and AM is able to calculate if the item is sold.";
 
-    public override string Version { get; } = "1.0.0.1";
+    public override string Version { get; set; } = "1.0.0.1";
 
     public SettingType Type { get; set; } = SettingType.Chat;
 

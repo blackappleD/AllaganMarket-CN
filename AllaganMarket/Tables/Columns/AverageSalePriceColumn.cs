@@ -21,7 +21,7 @@ public class AverageSalePriceColumn(NumberFormatInfo gilFormat, ImGuiService imG
 
     public override string HelpText { get; set; } = "The average sale price of this item.";
 
-    public override string Version { get; } = "1.0.0";
+    public override string Version { get; set; } = "1.0.0";
 
     public override string? RenderName { get; set; } = null;
 
