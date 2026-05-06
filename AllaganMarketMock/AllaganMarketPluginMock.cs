@@ -10,30 +10,26 @@ using AllaganMarket.Services.Interfaces;
 using Autofac;
 
 using DalaMock.Core.Mocks;
-using DalaMock.Core.Windows;
 using DalaMock.Shared.Interfaces;
 
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
-using Dalamud.Plugin.Services;
-
-using Microsoft.Extensions.DependencyInjection;
 
 namespace AllaganMarketMock;
 
 public class AllaganMarketPluginMock : AllaganMarketPlugin
 {
-    public AllaganMarketPluginMock(IDalamudPluginInterface pluginInterface)
+    public AllaganMarketPluginMock(MockReplacementContainer mockReplacementContainer, IDalamudPluginInterface pluginInterface)
         : base(pluginInterface)
     {
+        this.ReplacementContainer = mockReplacementContainer;
     }
+
+    public override IReplacementContainer ReplacementContainer { get; }
 
     public override void ConfigureContainer(ContainerBuilder containerBuilder)
     {
         base.ConfigureContainer(containerBuilder);
-        containerBuilder.RegisterType<MockWindowSystem>().AsSelf().As<IWindowSystem>().SingleInstance();
-        containerBuilder.RegisterType<MockFileDialogManager>().AsSelf().As<IFileDialogManager>().SingleInstance();
-        containerBuilder.RegisterType<MockFont>().AsSelf().As<IFont>().SingleInstance();
         containerBuilder.RegisterType<MockRetainerService>().AsSelf().As<IRetainerService>().SingleInstance();
         containerBuilder.RegisterType<MockWindow>().AsSelf().As<Window>().SingleInstance();
         containerBuilder.RegisterType<MockCharacterWindow>().AsSelf().As<Window>().SingleInstance();
@@ -49,5 +45,6 @@ public class AllaganMarketPluginMock : AllaganMarketPlugin
         replacements.Add(typeof(InventoryService), typeof(MockInventoryService));
         replacements.Add(typeof(GameInterfaceService), typeof(MockGameInterfaceService));
         replacements.Add(typeof(RetainerMarketService), typeof(MockRetainerMarketService));
+        replacements.Add(typeof(RetainerService), typeof(MockRetainerService));
     }
 }

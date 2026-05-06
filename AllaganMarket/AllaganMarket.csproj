@@ -10,8 +10,8 @@
     <PackageReference Include="AllaganLib.Interface" Version="2.2.0" />
     <PackageReference Include="AllaganLib.Shared" Version="2.2.0" />
     <PackageReference Include="AllaganLib.Universalis" Version="2.2.0" />
-    <PackageReference Include="DalaMock.Host" Version="5.1.0" />
-    <PackageReference Include="DalaMock.Shared" Version="5.1.0" />
+    <PackageReference Include="DalaMock.Host" Version="6.0.0" />
+    <PackageReference Include="DalaMock.Shared" Version="6.0.0" />
     <PackageReference Include="Humanizer" Version="3.0.1" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <PrivateAssets>all</PrivateAssets>

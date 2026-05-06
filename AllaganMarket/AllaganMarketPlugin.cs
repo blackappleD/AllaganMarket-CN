@@ -5,6 +5,8 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.WebSockets;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 
 using AllaganLib.Data.Service;
 using AllaganLib.Interface.FormFields;
@@ -55,8 +57,6 @@ public class AllaganMarketPlugin : HostedPlugin
         : base(
             pluginInterface)
     {
-        this.CreateHost();
-        this.Start();
     }
 
     private List<Type> HostedServices { get; } = new()
@@ -81,6 +81,7 @@ public class AllaganMarketPlugin : HostedPlugin
         typeof(LaunchButtonService),
         typeof(DtrService),
         typeof(HighlightingService),
+        typeof(RetainerService),
     };
 
     public List<Type> GetHostedServices()
@@ -161,7 +162,6 @@ public class AllaganMarketPlugin : HostedPlugin
         containerBuilder.RegisterTransientSelfAndInterfaces<BackgroundTaskQueue>();
         containerBuilder.RegisterType<SettingTypeConfiguration>().SingleInstance();
         containerBuilder.RegisterType<ImGuiMenus>().SingleInstance();
-        containerBuilder.RegisterType<RetainerService>().As<IRetainerService>().SingleInstance();
         containerBuilder.RegisterType<CsvLoaderService>().SingleInstance();
         containerBuilder.RegisterType<ImGuiService>().AsSelf().As<AllaganLib.Interface.Services.ImGuiService>()
                         .SingleInstance();
@@ -169,8 +169,6 @@ public class AllaganMarketPlugin : HostedPlugin
         containerBuilder.RegisterType<SoldItemTable>().SingleInstance();
         containerBuilder.RegisterType<SaleSummaryTable>().SingleInstance();
         containerBuilder.RegisterType<SearchResultConfiguration>();
-        containerBuilder.RegisterType<FileDialogManager>().SingleInstance();
-        containerBuilder.RegisterType<DalamudFileDialogManager>().As<IFileDialogManager>().SingleInstance();
         containerBuilder.RegisterType<AtkOrderService>().As<IAtkOrderService>().SingleInstance();
         containerBuilder.RegisterType<GameInterfaceService>().As<IGameInterfaceService>().SingleInstance();
 
@@ -209,7 +207,6 @@ public class AllaganMarketPlugin : HostedPlugin
                         .SingleInstance();
         containerBuilder.RegisterType<ConfigurationWizardService<Configuration>>().AsSelf().AsImplementedInterfaces()
                         .SingleInstance();
-        containerBuilder.RegisterType<Font>().As<IFont>().SingleInstance();
         containerBuilder.RegisterType<TimeSpanHumanizerCache>();
 
         // Sheets

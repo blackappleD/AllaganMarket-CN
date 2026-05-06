@@ -9,6 +9,7 @@ using AllaganMarket.Services;
 using AllaganMarket.Windows;
 
 using DalaMock.Core.Mocks;
+using DalaMock.Core.Mocks.DalamudServices;
 using DalaMock.Host.Mediator;
 
 using Dalamud.Interface.Utility.Raii;

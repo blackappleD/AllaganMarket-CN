@@ -2,8 +2,8 @@ using System.IO;
 
 using Autofac;
 
-using DalaMock.Core.DI;
-using DalaMock.Core.Mocks;
+using DalaMock.Core.Configuration;
+using DalaMock.Core.Plugin;
 using DalaMock.Core.Windows;
 
 namespace AllaganMarketMock;
@@ -21,8 +21,6 @@ internal class Program
         var mockDalamudUi = mockContainer.GetMockUi();
         var pluginLoader = mockContainer.GetPluginLoader();
         var mockPlugin = pluginLoader.AddPlugin(typeof(AllaganMarketPluginMock));
-        //pluginLoader.StartPlugin(mockPlugin);
-        mockContainer.GetContainer().Resolve<MockMockWindow>().IsOpen = true;
         mockDalamudUi.Run();
     }
 }
