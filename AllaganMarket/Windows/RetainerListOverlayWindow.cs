@@ -201,14 +201,19 @@ public class RetainerListOverlayWindow : OverlayWindow
                 ImGui.Text("Stale Pricing?");
                 foreach (var retainer in retainers)
                 {
-                    var isUnderCut = this.saleTrackerService.SaleItems[retainer.CharacterId]
-                                         .Any(c => this.undercutService.IsItemUndercut(c) ?? false);
-                    var needsUpdate = this.saleTrackerService.SaleItems[retainer.CharacterId]
-                                          .Any(c => !c.IsEmpty() && this.undercutService.NeedsUpdate(c, interval));
-                    var nextUpdate = this.saleTrackerService.SaleItems[retainer.CharacterId]
-                                         .Where(c => !c.IsEmpty()).DefaultIfEmpty()
+                    var isUnderCut = false;
+                    var needsUpdate = false;
+                    DateTime? nextUpdate = null;
+                    var sellingCount = 0;
+                    if (this.saleTrackerService.SaleItems.TryGetValue(retainer.CharacterId, out var value))
+                    {
+                        isUnderCut = value.Any(c => this.undercutService.IsItemUndercut(c) ?? false);
+                        needsUpdate = value.Any(c => !c.IsEmpty() && this.undercutService.NeedsUpdate(c, interval));
+                        nextUpdate = value.Where(c => !c.IsEmpty()).DefaultIfEmpty()
                                          .Min(c => c == null ? null : (DateTime?)this.undercutService.NextUpdateDate(c, interval));
-                    var sellingCount = this.saleTrackerService.SaleItems[retainer.CharacterId].Count(c => !c.IsEmpty());
+                        sellingCount = value.Count(c => !c.IsEmpty());
+                    }
+
                     if (!isUnderCut && !needsUpdate && !this.showAllRetainers)
                     {
                         continue;
