@@ -20,6 +20,8 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 using Microsoft.Extensions.Hosting;
 
+using AgentRetainer = AllaganMarket.Agents.AgentRetainer;
+
 namespace AllaganMarket.Services;
 
 /// <summary>
