@@ -3,6 +3,7 @@ using AllaganLib.Interface.Grid.ColumnFilters;
 using AllaganLib.Interface.Services;
 
 using AllaganMarket.Services.Interfaces;
+using LocalizationService = AllaganMarket.Services.LocalizationService;
 
 using DalaMock.Host.Mediator;
 
@@ -13,14 +14,19 @@ namespace AllaganMarket.Tables.Columns;
 public class RetainerColumn(
     ICharacterMonitorService characterMonitorService,
     ImGuiService imGuiService,
-    StringColumnFilter stringColumnFilter)
+    StringColumnFilter stringColumnFilter,
+    LocalizationService localization)
     : StringColumn<SearchResultConfiguration, SearchResult, MessageBase>(imGuiService, stringColumnFilter)
 {
     public override string DefaultValue { get; set; } = string.Empty;
 
     public override string Key { get; set; } = "RetainerName";
 
-    public override string Name { get; set; } = "Retainer";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.Retainer", "Retainer");
+        set { }
+    }
 
     public override string? RenderName { get; set; } = null;
 

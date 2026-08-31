@@ -40,6 +40,7 @@ public class RetainerSellOverlayWindow : OverlayWindow
     private readonly ShowRetainerOverlaySetting retainerOverlaySetting;
     private readonly IRetainerMarketService retainerMarketService;
     private readonly UndercutService undercutService;
+    private readonly LocalizationService localization;
 
     public RetainerSellOverlayWindow(
         IAddonLifecycle addonLifecycle,
@@ -57,7 +58,8 @@ public class RetainerSellOverlayWindow : OverlayWindow
         IInventoryService inventoryService,
         ShowRetainerOverlaySetting retainerOverlaySetting,
         IRetainerMarketService retainerMarketService,
-        UndercutService undercutService)
+        UndercutService undercutService,
+        LocalizationService localization)
         : base(addonLifecycle, gameGui, logger, mediator, imGuiService, "Retainer Sell Overlay")
     {
         this.characterMonitorService = characterMonitorService;
@@ -71,6 +73,7 @@ public class RetainerSellOverlayWindow : OverlayWindow
         this.retainerOverlaySetting = retainerOverlaySetting;
         this.retainerMarketService = retainerMarketService;
         this.undercutService = undercutService;
+        this.localization = localization;
         this.AttachAddon("RetainerSell", AttachPosition.Right);
         this.Flags = ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoResize;
         this.RespectCloseHotkey = false;
@@ -148,7 +151,8 @@ public class RetainerSellOverlayWindow : OverlayWindow
         }
 
         ImGui.SameLine();
-        ImGui.Text("Allagan Market");
+        this.localization.RefreshFromConfiguration();
+        ImGui.Text(this.localization.Get("Overlay.Title"));
 
         ImGui.SameLine();
 
@@ -158,7 +162,7 @@ public class RetainerSellOverlayWindow : OverlayWindow
                 this.font,
                 FontAwesomeIcon.Bars,
                 ref currentCursorPosX,
-                "Open the Allagan Market main window.",
+                this.localization.Get("Overlay.OpenMainWindow"),
                 true))
         {
             this.MediatorService.Publish(new ToggleWindowMessage(typeof(MainWindow)));
@@ -170,7 +174,7 @@ public class RetainerSellOverlayWindow : OverlayWindow
                 this.font,
                 FontAwesomeIcon.Cog,
                 ref currentCursorPosX,
-                "Open the Allagan Market configuration window.",
+                this.localization.Get("Overlay.OpenConfigWindow"),
                 true))
         {
             this.MediatorService.Publish(new ToggleWindowMessage(typeof(ConfigWindow)));
@@ -182,7 +186,7 @@ public class RetainerSellOverlayWindow : OverlayWindow
         {
             ImGui.PushTextWrapPos();
             ImGui.Text(
-                "The plugin has been reloaded since entering a retainer, please back out and load back into the retainer.");
+                this.localization.Get("Overlay.ReloadedMessage"));
             ImGui.PopTextWrapPos();
             return;
         }
@@ -213,29 +217,29 @@ public class RetainerSellOverlayWindow : OverlayWindow
                 marketCache = this.undercutService.GetMarketPriceCache(activeRetainer.WorldId, currentItem.Value.RowId, null);
             }
 
-            var recommendedPrice = recommendedUnitPrice == null ? "No Data" : recommendedUnitPrice.Value.Amount.ToString();
+            var recommendedPrice = recommendedUnitPrice == null ? this.localization.Get("Overlay.NoData") : recommendedUnitPrice.Value.Amount.ToString();
 
             using (ImRaii.Table("ItemList", 2, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoSavedSettings))
             {
-                ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 120 * ImGui.GetIO().FontGlobalScale);
+                ImGui.TableSetupColumn(this.localization.Get("Overlay.Name"), ImGuiTableColumnFlags.WidthFixed, 120 * ImGui.GetIO().FontGlobalScale);
                 ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, 200 * ImGui.GetIO().FontGlobalScale);
 
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.Text("Name: ");
+                ImGui.Text(this.localization.Get("Overlay.Name") + ": ");
                 ImGui.TableNextColumn();
                 ImGui.Text($"{currentItem.Value.Name}");
 
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.Text("Rec. Unit Price: ");
+                ImGui.Text(this.localization.Get("Overlay.RecommendedUnitPrice") + ": ");
 
                 ImGui.TableNextColumn();
                 ImGui.Text($"{recommendedPrice}");
                 ImGui.SameLine();
                 using (ImRaii.Disabled(recommendedUnitPrice == null))
                 {
-                    if (ImGui.SmallButton("Copy to Game"))
+                    if (ImGui.SmallButton(this.localization.Get("Overlay.CopyToGame")))
                     {
                         if (recommendedUnitPrice != null)
                         {
@@ -256,21 +260,21 @@ public class RetainerSellOverlayWindow : OverlayWindow
                 {
                     ImGui.SameLine();
                     this.ImGuiService.HelpMarker(
-                            "As you have undercut fallback on, the undercut was calculated based off the lowest NQ item.",
+                            this.localization.Get("Overlay.FallbackTooltip"),
                             textColor: ImGuiColors.DalamudYellow);
                 }
 
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.Text("Updated At: ");
+                ImGui.Text(this.localization.Get("Overlay.UpdatedAt") + ": ");
                 ImGui.TableNextColumn();
-                ImGui.Text($"{lastUpdated?.ToString(CultureInfo.CurrentCulture) ?? "No Data"}");
+                ImGui.Text($"{lastUpdated?.ToString(CultureInfo.CurrentCulture) ?? this.localization.Get("Overlay.NoData")}");
 
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.Text("Listed At: ");
+                ImGui.Text(this.localization.Get("Overlay.ListedAt") + ": ");
                 ImGui.TableNextColumn();
-                ImGui.Text($"{currentSaleItem?.ListedAt.ToString(CultureInfo.CurrentCulture) ?? "N/A"}");
+                ImGui.Text($"{currentSaleItem?.ListedAt.ToString(CultureInfo.CurrentCulture) ?? this.localization.Get("Overlay.NotAvailable")}");
             }
 
             using (ImRaii.PushFont(this.font.IconFont))
@@ -287,13 +291,13 @@ public class RetainerSellOverlayWindow : OverlayWindow
             {
                 using (ImRaii.Tooltip())
                 {
-                    ImGui.Text($"Sourced From: {marketCache?.GetFormattedType() ?? "N/A"}");
+                    ImGui.Text(this.localization.Format("Overlay.SourcedFrom", marketCache?.GetFormattedType() ?? this.localization.Get("Overlay.NotAvailable")));
                 }
             }
         }
         else
         {
-            ImGui.Text("Please login.");
+            ImGui.Text(this.localization.Get("Overlay.PleaseLogin"));
         }
     }
 }

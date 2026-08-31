@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Window.Main.Title" xml:space="preserve"><value>奥尔甘市场</value></data>
+  <data name="Window.Config.Title" xml:space="preserve"><value>奥尔甘市场 - 配置</value></data>
+  <data name="Window.Wizard.Title" xml:space="preserve"><value>奥尔甘市场 - 向导</value></data>
+  <data name="Wizard.Welcome" xml:space="preserve"><value>欢迎</value></data>
+  <data name="Wizard.WelcomeBack" xml:space="preserve"><value>欢迎回到 {0} 配置向导。</value></data>
+  <data name="Wizard.WelcomeFirstRun" xml:space="preserve"><value>欢迎使用 {0} 配置向导。</value></data>
+  <data name="Wizard.NewFeaturesDescription" xml:space="preserve"><value>有新功能可供配置，并且你选择在新功能出现时显示此窗口。</value></data>
+  <data name="Wizard.FirstRunDescription" xml:space="preserve"><value>本向导将引导你设置最常用的功能。允许后，发布新功能时会再次显示此向导。</value></data>
+  <data name="Wizard.Continue" xml:space="preserve"><value>继续</value></data>
+  <data name="Wizard.CloseShowNext" xml:space="preserve"><value>关闭（插件下次加载时再次显示）</value></data>
+  <data name="Wizard.ContinueShowNew" xml:space="preserve"><value>继续（有新功能时显示）</value></data>
+  <data name="Wizard.ContinueNeverShow" xml:space="preserve"><value>继续（不再显示向导）</value></data>
+  <data name="Wizard.CloseNeverShow" xml:space="preserve"><value>关闭（不再显示向导）</value></data>
+  <data name="Wizard.Previous" xml:space="preserve"><value>上一步</value></data>
+  <data name="Wizard.Next" xml:space="preserve"><value>下一步</value></data>
+  <data name="Wizard.Finish" xml:space="preserve"><value>完成</value></data>
+  <data name="Wizard.Feature.ChatNotifications.Name" xml:space="preserve"><value>聊天通知</value></data>
+  <data name="Wizard.Feature.ChatNotifications.Description" xml:space="preserve"><value>选择要在聊天中显示哪些通知。</value></data>
+  <data name="Wizard.Feature.GameIntegrations.Name" xml:space="preserve"><value>游戏集成</value></data>
+  <data name="Wizard.Feature.GameIntegrations.Description" xml:space="preserve"><value>启用直接集成到游戏中的功能。</value></data>
+  <data name="Wizard.Feature.Misc.Name" xml:space="preserve"><value>其他功能</value></data>
+  <data name="Wizard.Feature.Misc.Description" xml:space="preserve"><value>改善整体使用体验的其他功能。</value></data>
+  <data name="Wizard.Feature.Overlays.Name" xml:space="preserve"><value>悬浮窗</value></data>
+  <data name="Wizard.Feature.Overlays.Description" xml:space="preserve"><value>启用在游戏界面特定区域出现的悬浮窗。</value></data>
+  <data name="Wizard.Feature.Undercuts.Name" xml:space="preserve"><value>压价</value></data>
+  <data name="Wizard.Feature.Undercuts.Description" xml:space="preserve"><value>如何处理压价？</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>文件</value></data>
+  <data name="Menu.Configuration" xml:space="preserve"><value>配置</value></data>
+  <data name="Menu.MainWindow" xml:space="preserve"><value>主窗口</value></data>
+  <data name="Menu.ReportIssue" xml:space="preserve"><value>报告问题</value></data>
+  <data name="Menu.VerboseLogging" xml:space="preserve"><value>启用详细日志</value></data>
+  <data name="Menu.KoFi" xml:space="preserve"><value>Ko-Fi</value></data>
+  <data name="Menu.Close" xml:space="preserve"><value>关闭</value></data>
+  <data name="Menu.MoreInformation" xml:space="preserve"><value>更多信息</value></data>
+  <data name="Menu.OpenCraftingLog" xml:space="preserve"><value>打开制作手册</value></data>
+  <data name="Menu.DeleteSoldItem" xml:space="preserve"><value>删除已售物品</value></data>
+  <data name="Menu.MarkAsUpdated" xml:space="preserve"><value>标记为已更新</value></data>
+  <data name="Menu.UndercutSettings" xml:space="preserve"><value>压价设置：</value></data>
+  <data name="Menu.UseDefault" xml:space="preserve"><value>使用默认值</value></data>
+  <data name="Menu.Wizard" xml:space="preserve"><value>向导</value></data>
+  <data name="Menu.ConfigureNewFeatures" xml:space="preserve"><value>配置新功能</value></data>
+  <data name="Menu.ReconfigureAllFeatures" xml:space="preserve"><value>重新配置所有功能</value></data>
+  <data name="Menu.Edit" xml:space="preserve"><value>编辑</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>视图</value></data>
+  <data name="Menu.Export" xml:space="preserve"><value>导出</value></data>
+  <data name="Menu.MarkVisibleUpdated" xml:space="preserve"><value>将所有可见销售物品标记为已更新</value></data>
+  <data name="Menu.Grid" xml:space="preserve"><value>网格</value></data>
+  <data name="Menu.List" xml:space="preserve"><value>列表</value></data>
+  <data name="Menu.ActiveSuffix" xml:space="preserve"><value>（当前）</value></data>
+  <data name="Menu.ExportCurrentSales" xml:space="preserve"><value>导出当前销售</value></data>
+  <data name="Menu.ExportCurrentSalesFiltered" xml:space="preserve"><value>导出当前销售（已筛选）</value></data>
+  <data name="Menu.ExportHistory" xml:space="preserve"><value>导出销售历史（CSV）</value></data>
+  <data name="Menu.ExportHistoryFiltered" xml:space="preserve"><value>导出销售历史（已筛选）</value></data>
+  <data name="Menu.ExportSummary" xml:space="preserve"><value>导出销售汇总（CSV）</value></data>
+  <data name="Menu.ExportSummaryFiltered" xml:space="preserve"><value>导出销售汇总（已筛选）</value></data>
+  <data name="Window.Config.Configuration" xml:space="preserve"><value>配置</value></data>
+  <data name="SettingType.General" xml:space="preserve"><value>常规</value></data>
+  <data name="SettingType.Undercutting" xml:space="preserve"><value>压价</value></data>
+  <data name="SettingType.Features" xml:space="preserve"><value>功能</value></data>
+  <data name="SettingType.Overlays" xml:space="preserve"><value>悬浮窗</value></data>
+  <data name="SettingType.Highlighting" xml:space="preserve"><value>高亮</value></data>
+  <data name="SettingType.Chat" xml:space="preserve"><value>聊天</value></data>
+  <data name="Language.Auto" xml:space="preserve"><value>自动</value></data>
+  <data name="Language.English" xml:space="preserve"><value>English</value></data>
+  <data name="Language.ChineseSimplified" xml:space="preserve"><value>简体中文</value></data>
+  <data name="Setting.Language.Name" xml:space="preserve"><value>语言</value></data>
+  <data name="Setting.Language.Help" xml:space="preserve"><value>选择 Allagan Market 使用的语言。</value></data>
+  <data name="Setting.AddDtrBarEntry.Name" xml:space="preserve"><value>在服务器信息栏显示压价通知？</value></data>
+  <data name="Setting.AddTitleMenuButton.Name" xml:space="preserve"><value>添加标题界面按钮？</value></data>
+  <data name="Setting.ChatNotifySoldItem.Name" xml:space="preserve"><value>物品售出时在聊天中通知？</value></data>
+  <data name="Setting.SoldItemChatType.Name" xml:space="preserve"><value>物品售出通知的聊天频道</value></data>
+  <data name="Setting.ChatNotifyUndercutLoginCharacter.Name" xml:space="preserve"><value>为哪些角色显示压价通知？</value></data>
+  <data name="Setting.UndercutChatType.Name" xml:space="preserve"><value>压价通知的聊天频道</value></data>
+  <data name="Setting.UndercutGrouping.Name" xml:space="preserve"><value>压价通知分组方式</value></data>
+  <data name="Setting.UndercutLoginChatType.Name" xml:space="preserve"><value>登录时压价通知的聊天频道</value></data>
+  <data name="Setting.ChatNotifyUndercutLogin.Name" xml:space="preserve"><value>登录时显示压价通知？</value></data>
+  <data name="Setting.ChatNotifyUndercut.Name" xml:space="preserve"><value>发生压价时在聊天中通知？</value></data>
+  <data name="Setting.HighlightRetainerList.Name" xml:space="preserve"><value>高亮雇员列表？</value></data>
+  <data name="Setting.HighlightRetainerSellList.Name" xml:space="preserve"><value>高亮雇员出售列表？</value></data>
+  <data name="Setting.ItemUpdatePeriod.Name" xml:space="preserve"><value>价格过期时间</value></data>
+  <data name="Setting.RetainerOverlayCollapsed.Name" xml:space="preserve"><value>雇员悬浮窗折叠？</value></data>
+  <data name="Setting.RoundTo.Name" xml:space="preserve"><value>将推荐价格取整到最接近的倍数</value></data>
+  <data name="Setting.RoundUpDown.Name" xml:space="preserve"><value>向上或向下取整</value></data>
+  <data name="Setting.ShowRetainerOverlay.Name" xml:space="preserve"><value>显示雇员悬浮窗？</value></data>
+  <data name="Setting.UndercutAllowFallback.Name" xml:space="preserve"><value>允许压价回退</value></data>
+  <data name="Setting.UndercutBy.Name" xml:space="preserve"><value>压价金额</value></data>
+  <data name="Setting.UndercutComparison.Name" xml:space="preserve"><value>压价比较方式</value></data>
+  <data name="Setting.ViewMode.Name" xml:space="preserve"><value>销售/已售视图模式</value></data>
+  <data name="Chat.Undercuts.General" xml:space="preserve"><value>压价 - 常规</value></data>
+  <data name="Chat.Undercuts.Login" xml:space="preserve"><value>压价 - 登录时</value></data>
+  <data name="Chat.ItemSold" xml:space="preserve"><value>物品售出</value></data>
+  <data name="Setting.AddDtrBarEntry.Help" xml:space="preserve"><value>在服务器信息栏显示被压价的在售物品数量。</value></data>
+  <data name="Setting.AddTitleMenuButton.Help" xml:space="preserve"><value>在标题界面菜单中添加按钮。</value></data>
+  <data name="Setting.ChatNotifySoldItem.Help" xml:space="preserve"><value>物品售出时在聊天中显示通知。</value></data>
+  <data name="Setting.SoldItemChatType.Help" xml:space="preserve"><value>选择售出通知使用的聊天频道。</value></data>
+  <data name="Setting.ChatNotifyUndercutLoginCharacter.Help" xml:space="preserve"><value>选择显示当前角色的雇员，还是所有雇员的压价通知。</value></data>
+  <data name="Setting.UndercutChatType.Help" xml:space="preserve"><value>选择压价通知使用的聊天频道。</value></data>
+  <data name="Setting.UndercutGrouping.Help" xml:space="preserve"><value>选择多条压价通知的分组方式。</value></data>
+  <data name="Setting.UndercutLoginChatType.Help" xml:space="preserve"><value>选择登录时压价通知使用的聊天频道。</value></data>
+  <data name="Setting.ChatNotifyUndercutLogin.Help" xml:space="preserve"><value>登录时显示被压价物品的聊天通知。</value></data>
+  <data name="Setting.ChatNotifyUndercut.Help" xml:space="preserve"><value>物品被压价时显示聊天通知。</value></data>
+  <data name="Setting.HighlightRetainerList.Help" xml:space="preserve"><value>高亮包含需要更新物品的雇员。</value></data>
+  <data name="Setting.HighlightRetainerSellList.Help" xml:space="preserve"><value>在雇员出售列表中高亮需要更新的物品。</value></data>
+  <data name="Setting.ItemUpdatePeriod.Help" xml:space="preserve"><value>经过多少分钟后将物品价格视为过期。</value></data>
+  <data name="Setting.RetainerOverlayCollapsed.Help" xml:space="preserve"><value>设置雇员悬浮窗是否默认折叠。</value></data>
+  <data name="Setting.RoundTo.Help" xml:space="preserve"><value>将推荐价格取整到该数值的倍数。</value></data>
+  <data name="Setting.RoundUpDown.Help" xml:space="preserve"><value>选择推荐价格向上或向下取整。</value></data>
+  <data name="Setting.ShowRetainerOverlay.Help" xml:space="preserve"><value>使用雇员窗口时显示雇员悬浮窗。</value></data>
+  <data name="Setting.UndercutAllowFallback.Help" xml:space="preserve"><value>允许根据最低 NQ 售价计算回退价格。</value></data>
+  <data name="Setting.UndercutBy.Help" xml:space="preserve"><value>从市场最低价中减去的金币数量。</value></data>
+  <data name="Setting.UndercutComparison.Help" xml:space="preserve"><value>选择检测压价时比较哪些品质的商品。</value></data>
+  <data name="Setting.ViewMode.Help" xml:space="preserve"><value>选择销售和已售物品使用网格或列表布局。</value></data>
+  <data name="Setting.ViewMode.Choice.Grid" xml:space="preserve"><value>网格</value></data>
+  <data name="Setting.ViewMode.Choice.List" xml:space="preserve"><value>列表</value></data>
+  <data name="Setting.UndercutComparison.Choice.Any" xml:space="preserve"><value>任意品质</value></data>
+  <data name="Setting.UndercutComparison.Choice.MatchingQuality" xml:space="preserve"><value>相同品质</value></data>
+  <data name="Setting.UndercutComparison.Choice.NqOnly" xml:space="preserve"><value>仅 NQ</value></data>
+  <data name="Setting.UndercutComparison.Choice.HqOnly" xml:space="preserve"><value>仅 HQ</value></data>
+  <data name="Setting.UndercutGrouping.Choice.Individual" xml:space="preserve"><value>逐条通知</value></data>
+  <data name="Setting.UndercutGrouping.Choice.Together" xml:space="preserve"><value>全部合并</value></data>
+  <data name="Setting.UndercutGrouping.Choice.GroupByItem" xml:space="preserve"><value>按物品</value></data>
+  <data name="Setting.UndercutGrouping.Choice.GroupByRetainer" xml:space="preserve"><value>按雇员</value></data>
+  <data name="Setting.ChatNotifyUndercutLoginCharacter.Choice.OnlyActiveCharacter" xml:space="preserve"><value>仅当前角色的雇员</value></data>
+  <data name="Setting.ChatNotifyUndercutLoginCharacter.Choice.AllCharacters" xml:space="preserve"><value>所有雇员</value></data>
+  <data name="ChatType.None" xml:space="preserve"><value>无</value></data>
+  <data name="ChatType.Debug" xml:space="preserve"><value>调试</value></data>
+  <data name="ChatType.Urgent" xml:space="preserve"><value>紧急</value></data>
+  <data name="ChatType.Notice" xml:space="preserve"><value>通知</value></data>
+  <data name="ChatType.Say" xml:space="preserve"><value>说话</value></data>
+  <data name="ChatType.Shout" xml:space="preserve"><value>喊话</value></data>
+  <data name="ChatType.TellOutgoing" xml:space="preserve"><value>私聊（发出）</value></data>
+  <data name="ChatType.TellIncoming" xml:space="preserve"><value>私聊（收到）</value></data>
+  <data name="ChatType.Party" xml:space="preserve"><value>小队</value></data>
+  <data name="ChatType.Alliance" xml:space="preserve"><value>团队</value></data>
+  <data name="ChatType.Ls1" xml:space="preserve"><value>通讯贝 1</value></data>
+  <data name="ChatType.Ls2" xml:space="preserve"><value>通讯贝 2</value></data>
+  <data name="ChatType.Ls3" xml:space="preserve"><value>通讯贝 3</value></data>
+  <data name="ChatType.Ls4" xml:space="preserve"><value>通讯贝 4</value></data>
+  <data name="ChatType.Ls5" xml:space="preserve"><value>通讯贝 5</value></data>
+  <data name="ChatType.Ls6" xml:space="preserve"><value>通讯贝 6</value></data>
+  <data name="ChatType.Ls7" xml:space="preserve"><value>通讯贝 7</value></data>
+  <data name="ChatType.Ls8" xml:space="preserve"><value>通讯贝 8</value></data>
+  <data name="ChatType.FreeCompany" xml:space="preserve"><value>部队</value></data>
+  <data name="ChatType.NoviceNetwork" xml:space="preserve"><value>新人频道</value></data>
+  <data name="ChatType.Yell" xml:space="preserve"><value>呼喊</value></data>
+  <data name="ChatType.CrossParty" xml:space="preserve"><value>跨服小队</value></data>
+  <data name="ChatType.PvPTeam" xml:space="preserve"><value>PvP 小队</value></data>
+  <data name="ChatType.Echo" xml:space="preserve"><value>回声</value></data>
+  <data name="Main.DeleteCharacter" xml:space="preserve"><value>删除角色</value></data>
+  <data name="Main.DeleteCharacterConfirm" xml:space="preserve"><value>删除角色？</value></data>
+  <data name="Main.DeleteCharacterWarning" xml:space="preserve"><value>确定要删除此角色吗？该角色拥有的所有雇员也会被移除。</value></data>
+  <data name="Main.Confirm" xml:space="preserve"><value>确认</value></data>
+  <data name="Main.Cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="Main.NoCharacters" xml:space="preserve"><value>未找到角色，请先登录。</value></data>
+  <data name="Main.NoWorlds" xml:space="preserve"><value>未找到大区，请先登录。</value></data>
+  <data name="Main.LeftClickSelect" xml:space="preserve"><value>左键：选择/取消选择</value></data>
+  <data name="Main.RightClickMenu" xml:space="preserve"><value>右键：打开菜单</value></data>
+  <data name="Main.ArrowCollapse" xml:space="preserve"><value>方向键：展开/折叠</value></data>
+  <data name="Main.Class" xml:space="preserve"><value>职业：{0}</value></data>
+  <data name="Main.UnknownClass" xml:space="preserve"><value>未知职业</value></data>
+  <data name="Main.Level" xml:space="preserve"><value>等级：{0}</value></data>
+  <data name="Main.CurrentlySelling" xml:space="preserve"><value>当前在售</value></data>
+  <data name="Main.CurrentlySellingTooltip" xml:space="preserve"><value>这里显示你当前正在出售的物品。</value></data>
+  <data name="Main.SaleHistory" xml:space="preserve"><value>销售历史</value></data>
+  <data name="Main.SaleHistoryTooltip" xml:space="preserve"><value>这里显示你已经售出的物品。</value></data>
+  <data name="Main.SaleSummary" xml:space="preserve"><value>销售汇总</value></data>
+  <data name="Main.SaleSummaryTooltip" xml:space="preserve"><value>按指定时间范围对已售物品进行分组汇总。</value></data>
+  <data name="Main.NoSalesTracked" xml:space="preserve"><value>尚未记录销售数据，请访问雇员以首次扫描其销售物品。</value></data>
+  <data name="Main.EmptySlot" xml:space="preserve"><value>空槽位</value></data>
+  <data name="Main.UnknownCharacter" xml:space="preserve"><value>未知角色</value></data>
+  <data name="Main.UnknownCharacterRetainer" xml:space="preserve"><value>未知角色/雇员</value></data>
+  <data name="Main.UnknownWorld" xml:space="preserve"><value>未知大区</value></data>
+  <data name="Main.Unknown" xml:space="preserve"><value>未知</value></data>
+  <data name="Main.UndercutBy" xml:space="preserve"><value>该物品被压价，差额为 {0}</value></data>
+  <data name="Main.Listed" xml:space="preserve"><value>上架时间：{0}</value></data>
+  <data name="Main.Updated" xml:space="preserve"><value>更新时间：{0}</value></data>
+  <data name="Main.LatestData" xml:space="preserve"><value>最新数据：</value></data>
+  <data name="Main.Source" xml:space="preserve"><value>来源：{0}</value></data>
+  <data name="Main.UnitPriceNq" xml:space="preserve"><value>NQ 单价：{0}</value></data>
+  <data name="Main.UnitPriceHq" xml:space="preserve"><value>HQ 单价：{0}</value></data>
+  <data name="Main.Search" xml:space="preserve"><value>搜索</value></data>
+  <data name="Main.SearchLabel" xml:space="preserve"><value>搜索：</value></data>
+  <data name="Main.ClearSearch" xml:space="preserve"><value>清除搜索</value></data>
+  <data name="Main.ShowEmptySlots" xml:space="preserve"><value>显示空槽位：</value></data>
+  <data name="Main.DateRange" xml:space="preserve"><value>日期范围</value></data>
+  <data name="Main.SinceToday" xml:space="preserve"><value>从今天开始</value></data>
+  <data name="Main.ToggleSearchBar" xml:space="preserve"><value>切换搜索栏</value></data>
+  <data name="Main.RetainerOpenedBeforePlugin" xml:space="preserve"><value>你在插件加载前就打开了雇员窗口。请返回雇员列表后重新打开雇员。插件更新或刚安装后可能出现此情况。</value></data>
+  <data name="Main.SalesStatus" xml:space="preserve"><value>在 {1} 上架 {0} 件物品，总价值 {2}</value></data>
+  <data name="Main.SoldStatus" xml:space="preserve"><value>在 {1} 售出 {0} 件物品，总价值 {2}</value></data>
+  <data name="Main.GilStored" xml:space="preserve"><value>{0} 存有 {1}。</value></data>
+  <data name="Main.SoldOn" xml:space="preserve"><value>售出时间：{0}</value></data>
+  <data name="Main.QuantityAt" xml:space="preserve"><value>{0} 件，单价 {1}（合计 {2}）</value></data>
+  <data name="Column.Icon" xml:space="preserve"><value>图标</value></data>
+  <data name="Column.Name" xml:space="preserve"><value>名称</value></data>
+  <data name="Column.Quantity" xml:space="preserve"><value>数量</value></data>
+  <data name="Column.UnitPrice" xml:space="preserve"><value>单价</value></data>
+  <data name="Column.World" xml:space="preserve"><value>大区</value></data>
+  <data name="Column.Retainer" xml:space="preserve"><value>雇员</value></data>
+  <data name="Column.UndercutBy" xml:space="preserve"><value>压价金额</value></data>
+  <data name="Column.ListedAt" xml:space="preserve"><value>上架时间</value></data>
+  <data name="Column.UpdatedAt" xml:space="preserve"><value>更新时间</value></data>
+  <data name="Column.SoldAt" xml:space="preserve"><value>售出时间</value></data>
+  <data name="Column.IsHQ" xml:space="preserve"><value>HQ？</value></data>
+  <data name="Column.AverageSalePrice" xml:space="preserve"><value>平均售价</value></data>
+  <data name="Column.Tax" xml:space="preserve"><value>税费 </value></data>
+  <data name="Column.Total" xml:space="preserve"><value>总计 </value></data>
+  <data name="Main.SaleSummaryGroup" xml:space="preserve"><value>销售汇总分组</value></data>
+  <data name="Main.SaleSummaryGroupHelp" xml:space="preserve"><value>选择销售汇总的分组方式</value></data>
+  <data name="Main.GroupBy" xml:space="preserve"><value>分组：{0}</value></data>
+  <data name="Main.SaleSummaryDateRange" xml:space="preserve"><value>销售汇总日期范围</value></data>
+  <data name="Main.SaleSummaryDateRangeHelp" xml:space="preserve"><value>设置销售汇总结果的日期范围。</value></data>
+  <data name="Main.SaleSummaryTimeSpan" xml:space="preserve"><value>销售汇总时间跨度</value></data>
+  <data name="SaleSummaryGroup.None" xml:space="preserve"><value>无</value></data>
+  <data name="SaleSummaryGroup.Item" xml:space="preserve"><value>物品</value></data>
+  <data name="SaleSummaryGroup.World" xml:space="preserve"><value>大区</value></data>
+  <data name="SaleSummaryGroup.IsHq" xml:space="preserve"><value>HQ</value></data>
+  <data name="SaleSummaryGroup.Owner" xml:space="preserve"><value>所有者</value></data>
+  <data name="SaleSummaryGroup.Retainer" xml:space="preserve"><value>雇员</value></data>
+  <data name="Notification.UndercutIndividual" xml:space="preserve"><value>你的物品被压价 {0}：{1}</value></data>
+  <data name="Notification.UndercutTogether" xml:space="preserve"><value>你的 {0} 件物品被压价。</value></data>
+  <data name="Notification.UndercutByItem" xml:space="preserve"><value>你正在出售的 {2}（{1} 件）被压价 {0}。</value></data>
+  <data name="Notification.UndercutByRetainer" xml:space="preserve"><value>{1} 正在出售的 {0} 件物品被压价。</value></data>
+  <data name="Notification.ItemSold" xml:space="preserve"><value>你售出了 {0} 个 {1}，获得 {2}</value></data>
+  <data name="Overlay.Title" xml:space="preserve"><value>奥尔甘市场</value></data>
+  <data name="Overlay.OpenMainWindow" xml:space="preserve"><value>打开奥尔甘市场主窗口。</value></data>
+  <data name="Overlay.OpenConfigWindow" xml:space="preserve"><value>打开奥尔甘市场配置窗口。</value></data>
+  <data name="Overlay.ShowHideItems" xml:space="preserve"><value>显示/隐藏需要更新的物品。</value></data>
+  <data name="Overlay.ShowHideRetainers" xml:space="preserve"><value>显示/隐藏需要更新的雇员。</value></data>
+  <data name="Overlay.ToggleRetainerListHighlighting" xml:space="preserve"><value>切换雇员列表高亮。</value></data>
+  <data name="Overlay.ToggleRetainerSellListHighlighting" xml:space="preserve"><value>切换雇员出售列表高亮。</value></data>
+  <data name="Overlay.ReloadedMessage" xml:space="preserve"><value>进入雇员后插件被重新加载，请退出雇员窗口后重新进入。</value></data>
+  <data name="Overlay.Name" xml:space="preserve"><value>名称</value></data>
+  <data name="Overlay.RecommendedUnitPrice" xml:space="preserve"><value>推荐单价</value></data>
+  <data name="Overlay.CopyToGame" xml:space="preserve"><value>复制到游戏</value></data>
+  <data name="Overlay.UpdatedAt" xml:space="preserve"><value>更新时间</value></data>
+  <data name="Overlay.ListedAt" xml:space="preserve"><value>上架时间</value></data>
+  <data name="Overlay.SourcedFrom" xml:space="preserve"><value>数据来源：{0}</value></data>
+  <data name="Overlay.NoData" xml:space="preserve"><value>无数据</value></data>
+  <data name="Overlay.NotAvailable" xml:space="preserve"><value>N/A</value></data>
+  <data name="Overlay.PleaseLogin" xml:space="preserve"><value>请先登录。</value></data>
+  <data name="Overlay.FallbackTooltip" xml:space="preserve"><value>由于启用了压价回退，此压价金额根据最低 NQ 物品计算。</value></data>
+  <data name="Overlay.Slot" xml:space="preserve"><value>槽位</value></data>
+  <data name="Overlay.RecommendedPrice" xml:space="preserve"><value>推荐价格</value></data>
+  <data name="Overlay.Undercut" xml:space="preserve"><value>被压价？</value></data>
+  <data name="Overlay.StalePricing" xml:space="preserve"><value>价格过期？</value></data>
+  <data name="Overlay.Empty" xml:space="preserve"><value>空槽位</value></data>
+  <data name="Overlay.UnknownItem" xml:space="preserve"><value>未知物品</value></data>
+  <data name="Overlay.Yes" xml:space="preserve"><value>是</value></data>
+  <data name="Overlay.No" xml:space="preserve"><value>否</value></data>
+  <data name="Overlay.NoItemsLeft" xml:space="preserve"><value>没有需要更新的物品。</value></data>
+  <data name="Overlay.Selling" xml:space="preserve"><value>在售</value></data>
+  <data name="Overlay.LastUpdate" xml:space="preserve"><value>上次更新</value></data>
+  <data name="Overlay.NoRetainersLeft" xml:space="preserve"><value>没有需要更新的雇员。</value></data>
+</root>

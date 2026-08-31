@@ -9,16 +9,22 @@ using Dalamud.Bindings.ImGui;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
 
+using LocalizationService = AllaganMarket.Services.LocalizationService;
+
 namespace AllaganMarket.Tables.Columns;
 
-public class WorldColumn(ExcelSheet<World> worldSheet, ImGuiService imGuiService, StringColumnFilter stringColumnFilter)
+public class WorldColumn(ExcelSheet<World> worldSheet, ImGuiService imGuiService, StringColumnFilter stringColumnFilter, LocalizationService localization)
     : StringColumn<SearchResultConfiguration, SearchResult, MessageBase>(imGuiService, stringColumnFilter)
 {
     public override string DefaultValue { get; set; } = string.Empty;
 
     public override string Key { get; set; } = "World";
 
-    public override string Name { get; set; } = "World";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.World", "World");
+        set { }
+    }
 
     public override string? RenderName { get; set; } = null;
 

@@ -28,6 +28,7 @@ public class NotificationService : IHostedService
     private readonly SaleTrackerService saleTrackerService;
     private readonly IChatGui chatGui;
     private readonly Configuration configuration;
+    private readonly LocalizationService localization;
     private readonly ChatNotifySoldItemSetting notifySoldItemSetting;
     private readonly ChatNotifySoldItemChatTypeSetting notifySoldItemChatTypeSetting;
     private readonly ExcelSheet<Item> itemSheet;
@@ -48,6 +49,7 @@ public class NotificationService : IHostedService
         SaleTrackerService saleTrackerService,
         IChatGui chatGui,
         Configuration configuration,
+        LocalizationService localization,
         ExcelSheet<Item> itemSheet,
         NumberFormatInfo gilNumberFormat,
         IClientState clientState,
@@ -66,6 +68,7 @@ public class NotificationService : IHostedService
         this.saleTrackerService = saleTrackerService;
         this.chatGui = chatGui;
         this.configuration = configuration;
+        this.localization = localization;
         this.notifySoldItemSetting = notifySoldItemSetting;
         this.notifySoldItemChatTypeSetting = notifySoldItemChatTypeSetting;
         this.itemSheet = itemSheet;
@@ -167,7 +170,10 @@ public class NotificationService : IHostedService
                     {
                         this.SendMessage(
                             chatType,
-                            $"You have been undercut by {undercutAmount.Value.ToString("C", this.gilNumberFormat)} for {item.Value.Singular.ExtractText()}");
+                            this.localization.Format(
+                                "Notification.UndercutIndividual",
+                                undercutAmount.Value.ToString("C", this.gilNumberFormat),
+                                item.Value.Singular.ExtractText()));
                     }
                 }
             }
@@ -175,7 +181,7 @@ public class NotificationService : IHostedService
             {
                 this.SendMessage(
                     chatType,
-                    $"You have been undercut on {undercutItems.Count} items.");
+                    this.localization.Format("Notification.UndercutTogether", undercutItems.Count));
             }
             else if (groupingSetting == ChatNotifyUndercutGrouping.GroupByItem)
             {
@@ -197,7 +203,11 @@ public class NotificationService : IHostedService
                     {
                         this.SendMessage(
                             chatType,
-                            $"You have been undercut by {totalUndercutAmount.ToString("C", this.gilNumberFormat)} on {itemGroup.Count()} {item.Value.Singular.ExtractText()} you are selling.");
+                            this.localization.Format(
+                                "Notification.UndercutByItem",
+                                totalUndercutAmount.ToString("C", this.gilNumberFormat),
+                                itemGroup.Count(),
+                                item.Value.Singular.ExtractText()));
                     }
                 }
             }
@@ -210,7 +220,7 @@ public class NotificationService : IHostedService
                     {
                         this.SendMessage(
                             chatType,
-                            $"You have been undercut on {itemGroup.Count()} items that {retainer.Name} is selling.");
+                            this.localization.Format("Notification.UndercutByRetainer", itemGroup.Count(), retainer.Name));
                     }
                 }
             }
@@ -235,7 +245,11 @@ public class NotificationService : IHostedService
             {
                 var chatEntry = new XivChatEntry();
                 chatEntry.Message = new SeStringBuilder().AddText(
-                                                             $"You sold {soldItem.Quantity} {item.Value.Name.ExtractText()} for {soldItem.TotalIncTax.ToString("C", this.gilNumberFormat)}")
+                                                             this.localization.Format(
+                                                                 "Notification.ItemSold",
+                                                                 soldItem.Quantity,
+                                                                 item.Value.Name.ExtractText(),
+                                                                 soldItem.TotalIncTax.ToString("C", this.gilNumberFormat)))
                                                          .BuiltString;
                 chatEntry.Type = this.notifySoldItemChatTypeSetting.CurrentValue(this.configuration);
                 this.chatGui.Print(chatEntry);

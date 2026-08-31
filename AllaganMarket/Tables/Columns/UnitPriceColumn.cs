@@ -4,20 +4,26 @@ using AllaganLib.Interface.Grid;
 using AllaganLib.Interface.Grid.ColumnFilters;
 using AllaganLib.Interface.Services;
 
+using LocalizationService = AllaganMarket.Services.LocalizationService;
+
 using DalaMock.Host.Mediator;
 
 using Dalamud.Bindings.ImGui;
 
 namespace AllaganMarket.Tables.Columns;
 
-public class UnitPriceColumn(NumberFormatInfo gilFormat, ImGuiService imGuiService, StringColumnFilter stringColumnFilter)
+public class UnitPriceColumn(NumberFormatInfo gilFormat, ImGuiService imGuiService, StringColumnFilter stringColumnFilter, LocalizationService localization)
     : GilColumn(gilFormat, imGuiService, stringColumnFilter)
 {
     public override string DefaultValue { get; set; } = string.Empty;
 
     public override string Key { get; set; } = "UnitPrice";
 
-    public override string Name { get; set; } = "Unit Price";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.UnitPrice", "Unit Price");
+        set { }
+    }
 
     public override string? RenderName { get; set; }
 

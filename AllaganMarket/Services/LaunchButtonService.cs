@@ -27,6 +27,7 @@ public class LaunchButtonService : DisposableMediatorSubscriberBase, IHostedServ
     private readonly PluginStateService pluginStateService;
     private readonly Configuration configuration;
     private readonly AddTitleMenuButtonSetting addTitleMenuButtonSetting;
+    private readonly LocalizationService localization;
     private readonly ITextureProvider textureProvider;
     private readonly string fileName;
     private IReadOnlyTitleScreenMenuEntry? entry;
@@ -39,7 +40,8 @@ public class LaunchButtonService : DisposableMediatorSubscriberBase, IHostedServ
         IDalamudPluginInterface pluginInterfaceService,
         PluginStateService pluginStateService,
         Configuration configuration,
-        AddTitleMenuButtonSetting addTitleMenuButtonSetting)
+        AddTitleMenuButtonSetting addTitleMenuButtonSetting,
+        LocalizationService localization)
         : base(pluginLog, mediatorService)
     {
         this.titleScreenMenu = titleScreenMenu;
@@ -47,6 +49,7 @@ public class LaunchButtonService : DisposableMediatorSubscriberBase, IHostedServ
         this.pluginStateService = pluginStateService;
         this.configuration = configuration;
         this.addTitleMenuButtonSetting = addTitleMenuButtonSetting;
+        this.localization = localization;
         this.textureProvider = textureProvider;
         var assemblyLocation = pluginInterfaceService.AssemblyLocation.DirectoryName!;
         this.fileName = Path.Combine(assemblyLocation, Path.Combine("Images", "logo_menu.png"));
@@ -81,7 +84,7 @@ public class LaunchButtonService : DisposableMediatorSubscriberBase, IHostedServ
 
         try
         {
-            this.entry = this.titleScreenMenu.AddEntry("Allagan Market", this.textureProvider.GetFromFile(this.fileName), this.OnTriggered);
+            this.entry = this.titleScreenMenu.AddEntry(this.localization.Get("Window.Main.Title"), this.textureProvider.GetFromFile(this.fileName), this.OnTriggered);
 
             this.pluginInterfaceService.UiBuilder.Draw -= this.CreateEntry;
         }

@@ -7,19 +7,28 @@ using AllaganLib.Interface.Services;
 
 using AllaganMarket.Extensions;
 using AllaganMarket.Models;
+using LocalizationService = AllaganMarket.Services.LocalizationService;
 
 namespace AllaganMarket.Tables.Fields;
 
-public class SaleSummaryGroupFormField(ImGuiService imGuiService)
+public class SaleSummaryGroupFormField(ImGuiService imGuiService, LocalizationService localization)
     : FlagsEnumFormField<SaleSummaryGroup, SaleSummary>(imGuiService)
 {
     public override SaleSummaryGroup DefaultValue { get; set; } = SaleSummaryGroup.Item;
 
     public override string Key { get; set; } = "SaleSummaryGroup";
 
-    public override string Name { get; set; } = "Sale Summary Group";
+    public override string Name
+    {
+        get => localization.Get("Main.SaleSummaryGroup");
+        set { }
+    }
 
-    public override string HelpText { get; set; } = "What to group the sale summary by";
+    public override string HelpText
+    {
+        get => localization.Get("Main.SaleSummaryGroupHelp");
+        set { }
+    }
 
     public override string Version { get; set; } = "1.0.0";
 
@@ -44,17 +53,17 @@ public class SaleSummaryGroupFormField(ImGuiService imGuiService)
     {
         var currentValue = this.CurrentValue(configuration);
         var choices = this.GetChoices(configuration);
-        return "Group by " + string.Join(
+        return localization.Format("Main.GroupBy", string.Join(
                    ", ",
                    choices.Where(
                               c => (c.Key != SaleSummaryGroup.None && currentValue.HasFlag(c.Key)) ||
                                    (currentValue == SaleSummaryGroup.None && c.Key == SaleSummaryGroup.None))
-                          .Select(c => c.Value));
+                          .Select(c => localization.GetOrDefault($"SaleSummaryGroup.{c.Key}", c.Value))));
     }
 
     public override Dictionary<SaleSummaryGroup, string> GetChoices(SaleSummary configuration)
     {
         var values = Enum.GetValues<SaleSummaryGroup>();
-        return values.ToDictionary(c => c, c => c.FormattedName());
+        return values.ToDictionary(c => c, c => localization.GetOrDefault($"SaleSummaryGroup.{c}", c.FormattedName()));
     }
 }

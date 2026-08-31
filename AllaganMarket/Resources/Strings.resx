@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Window.Main.Title" xml:space="preserve"><value>Allagan Market</value></data>
+  <data name="Window.Config.Title" xml:space="preserve"><value>Allagan Market - Configuration</value></data>
+  <data name="Window.Wizard.Title" xml:space="preserve"><value>Allagan Market - Wizard</value></data>
+  <data name="Wizard.Welcome" xml:space="preserve"><value>Welcome</value></data>
+  <data name="Wizard.WelcomeBack" xml:space="preserve"><value>Welcome back to the {0} configuration wizard.</value></data>
+  <data name="Wizard.WelcomeFirstRun" xml:space="preserve"><value>Welcome to the {0} configuration wizard.</value></data>
+  <data name="Wizard.NewFeaturesDescription" xml:space="preserve"><value>There are new features available to configure and you elected to show this window when that occurs.</value></data>
+  <data name="Wizard.FirstRunDescription" xml:space="preserve"><value>This will guide you through the setup of the most commonly used features. With your permission, this wizard will show itself again when a new feature is released.</value></data>
+  <data name="Wizard.Continue" xml:space="preserve"><value>Continue</value></data>
+  <data name="Wizard.CloseShowNext" xml:space="preserve"><value>Close (and show next time the plugin loads)</value></data>
+  <data name="Wizard.ContinueShowNew" xml:space="preserve"><value>Continue (and show on new features)</value></data>
+  <data name="Wizard.ContinueNeverShow" xml:space="preserve"><value>Continue (and never show the wizard again)</value></data>
+  <data name="Wizard.CloseNeverShow" xml:space="preserve"><value>Close (and never show the wizard again)</value></data>
+  <data name="Wizard.Previous" xml:space="preserve"><value>Previous</value></data>
+  <data name="Wizard.Next" xml:space="preserve"><value>Next</value></data>
+  <data name="Wizard.Finish" xml:space="preserve"><value>Finish</value></data>
+  <data name="Wizard.Feature.ChatNotifications.Name" xml:space="preserve"><value>Chat Notifications</value></data>
+  <data name="Wizard.Feature.ChatNotifications.Description" xml:space="preserve"><value>What messages should be displayed in chat?</value></data>
+  <data name="Wizard.Feature.GameIntegrations.Name" xml:space="preserve"><value>Game Integrations</value></data>
+  <data name="Wizard.Feature.GameIntegrations.Description" xml:space="preserve"><value>Activate features that integrate directly into the game.</value></data>
+  <data name="Wizard.Feature.Misc.Name" xml:space="preserve"><value>Misc Features</value></data>
+  <data name="Wizard.Feature.Misc.Description" xml:space="preserve"><value>Miscellaneous features that improve your overall experience.</value></data>
+  <data name="Wizard.Feature.Overlays.Name" xml:space="preserve"><value>Overlays</value></data>
+  <data name="Wizard.Feature.Overlays.Description" xml:space="preserve"><value>Activate overlays that will appear when certain parts of the game UI are present.</value></data>
+  <data name="Wizard.Feature.Undercuts.Name" xml:space="preserve"><value>Undercuts</value></data>
+  <data name="Wizard.Feature.Undercuts.Description" xml:space="preserve"><value>How should undercuts be handled?</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>File</value></data>
+  <data name="Menu.Configuration" xml:space="preserve"><value>Configuration</value></data>
+  <data name="Menu.MainWindow" xml:space="preserve"><value>Main Window</value></data>
+  <data name="Menu.ReportIssue" xml:space="preserve"><value>Report an Issue</value></data>
+  <data name="Menu.VerboseLogging" xml:space="preserve"><value>Enable Verbose Logging</value></data>
+  <data name="Menu.KoFi" xml:space="preserve"><value>Ko-Fi</value></data>
+  <data name="Menu.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Menu.MoreInformation" xml:space="preserve"><value>More Information</value></data>
+  <data name="Menu.OpenCraftingLog" xml:space="preserve"><value>Open Crafting Log</value></data>
+  <data name="Menu.DeleteSoldItem" xml:space="preserve"><value>Delete Sold Item</value></data>
+  <data name="Menu.MarkAsUpdated" xml:space="preserve"><value>Mark as Updated</value></data>
+  <data name="Menu.UndercutSettings" xml:space="preserve"><value>Undercut Settings:</value></data>
+  <data name="Menu.UseDefault" xml:space="preserve"><value>Use Default</value></data>
+  <data name="Menu.Wizard" xml:space="preserve"><value>Wizard</value></data>
+  <data name="Menu.ConfigureNewFeatures" xml:space="preserve"><value>Configure New Features</value></data>
+  <data name="Menu.ReconfigureAllFeatures" xml:space="preserve"><value>Reconfigure All Features</value></data>
+  <data name="Menu.Edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>View</value></data>
+  <data name="Menu.Export" xml:space="preserve"><value>Export</value></data>
+  <data name="Menu.MarkVisibleUpdated" xml:space="preserve"><value>Mark all visible sale items as updated</value></data>
+  <data name="Menu.Grid" xml:space="preserve"><value>Grid</value></data>
+  <data name="Menu.List" xml:space="preserve"><value>List</value></data>
+  <data name="Menu.ActiveSuffix" xml:space="preserve"><value> (Active)</value></data>
+  <data name="Menu.ExportCurrentSales" xml:space="preserve"><value>Export Current Sales</value></data>
+  <data name="Menu.ExportCurrentSalesFiltered" xml:space="preserve"><value>Export Current Sales (Filtered)</value></data>
+  <data name="Menu.ExportHistory" xml:space="preserve"><value>Export History (CSV)</value></data>
+  <data name="Menu.ExportHistoryFiltered" xml:space="preserve"><value>Export History (Filtered)</value></data>
+  <data name="Menu.ExportSummary" xml:space="preserve"><value>Export Sales Summary (CSV)</value></data>
+  <data name="Menu.ExportSummaryFiltered" xml:space="preserve"><value>Export Sales Summary (Filtered)</value></data>
+  <data name="Window.Config.Configuration" xml:space="preserve"><value>Configuration</value></data>
+  <data name="SettingType.General" xml:space="preserve"><value>General</value></data>
+  <data name="SettingType.Undercutting" xml:space="preserve"><value>Undercutting</value></data>
+  <data name="SettingType.Features" xml:space="preserve"><value>Features</value></data>
+  <data name="SettingType.Overlays" xml:space="preserve"><value>Overlays</value></data>
+  <data name="SettingType.Highlighting" xml:space="preserve"><value>Highlighting</value></data>
+  <data name="SettingType.Chat" xml:space="preserve"><value>Chat</value></data>
+  <data name="Language.Auto" xml:space="preserve"><value>Auto</value></data>
+  <data name="Language.English" xml:space="preserve"><value>English</value></data>
+  <data name="Language.ChineseSimplified" xml:space="preserve"><value>简体中文</value></data>
+  <data name="Setting.Language.Name" xml:space="preserve"><value>Language</value></data>
+  <data name="Setting.Language.Help" xml:space="preserve"><value>Choose the language used by Allagan Market.</value></data>
+  <data name="Setting.AddDtrBarEntry.Name" xml:space="preserve"><value>Add undercut notification to server info bar?</value></data>
+  <data name="Setting.AddTitleMenuButton.Name" xml:space="preserve"><value>Add title menu button?</value></data>
+  <data name="Setting.ChatNotifySoldItem.Name" xml:space="preserve"><value>Show chat messages on sale of item?</value></data>
+  <data name="Setting.SoldItemChatType.Name" xml:space="preserve"><value>Show chat messages on sale of item - chat type</value></data>
+  <data name="Setting.ChatNotifyUndercutLoginCharacter.Name" xml:space="preserve"><value>Show chat messages for undercuts for which characters?</value></data>
+  <data name="Setting.UndercutChatType.Name" xml:space="preserve"><value>Show chat messages on undercut - chat type</value></data>
+  <data name="Setting.UndercutGrouping.Name" xml:space="preserve"><value>Group undercut messages by?</value></data>
+  <data name="Setting.UndercutLoginChatType.Name" xml:space="preserve"><value>Show chat message for undercuts on login - chat type</value></data>
+  <data name="Setting.ChatNotifyUndercutLogin.Name" xml:space="preserve"><value>Show chat message for undercuts on login?</value></data>
+  <data name="Setting.ChatNotifyUndercut.Name" xml:space="preserve"><value>Show chat messages on undercut?</value></data>
+  <data name="Setting.HighlightRetainerList.Name" xml:space="preserve"><value>Highlight retainer list?</value></data>
+  <data name="Setting.HighlightRetainerSellList.Name" xml:space="preserve"><value>Highlight retainer sell list?</value></data>
+  <data name="Setting.ItemUpdatePeriod.Name" xml:space="preserve"><value>Stale Pricing Period</value></data>
+  <data name="Setting.RetainerOverlayCollapsed.Name" xml:space="preserve"><value>Retainer Overlay - Collapsed?</value></data>
+  <data name="Setting.RoundTo.Name" xml:space="preserve"><value>Round the recommended price to the nearest multiple of</value></data>
+  <data name="Setting.RoundUpDown.Name" xml:space="preserve"><value>Round up or down</value></data>
+  <data name="Setting.ShowRetainerOverlay.Name" xml:space="preserve"><value>Show Retainer Overlay?</value></data>
+  <data name="Setting.UndercutAllowFallback.Name" xml:space="preserve"><value>Undercut fallback</value></data>
+  <data name="Setting.UndercutBy.Name" xml:space="preserve"><value>Undercut amount</value></data>
+  <data name="Setting.UndercutComparison.Name" xml:space="preserve"><value>Undercut comparison</value></data>
+  <data name="Setting.ViewMode.Name" xml:space="preserve"><value>Sales/Sold View Mode</value></data>
+  <data name="Chat.Undercuts.General" xml:space="preserve"><value>Undercuts - General</value></data>
+  <data name="Chat.Undercuts.Login" xml:space="preserve"><value>Undercuts - On Login</value></data>
+  <data name="Chat.ItemSold" xml:space="preserve"><value>Item Sold</value></data>
+  <data name="Setting.AddDtrBarEntry.Help" xml:space="preserve"><value>Adds a server info bar entry showing how many listed items have been undercut.</value></data>
+  <data name="Setting.AddTitleMenuButton.Help" xml:space="preserve"><value>Adds a button to the title screen menu.</value></data>
+  <data name="Setting.ChatNotifySoldItem.Help" xml:space="preserve"><value>Show a chat message when an item is sold.</value></data>
+  <data name="Setting.SoldItemChatType.Help" xml:space="preserve"><value>Select the chat channel for sale notifications.</value></data>
+  <data name="Setting.ChatNotifyUndercutLoginCharacter.Help" xml:space="preserve"><value>Choose whether to show undercuts for the active character or all retainers.</value></data>
+  <data name="Setting.UndercutChatType.Help" xml:space="preserve"><value>Select the chat channel for undercut notifications.</value></data>
+  <data name="Setting.UndercutGrouping.Help" xml:space="preserve"><value>Choose how multiple undercut notifications are grouped.</value></data>
+  <data name="Setting.UndercutLoginChatType.Help" xml:space="preserve"><value>Select the chat channel for login undercut notifications.</value></data>
+  <data name="Setting.ChatNotifyUndercutLogin.Help" xml:space="preserve"><value>Show a chat message for items undercut while logging in.</value></data>
+  <data name="Setting.ChatNotifyUndercut.Help" xml:space="preserve"><value>Show a chat message whenever an item is undercut.</value></data>
+  <data name="Setting.HighlightRetainerList.Help" xml:space="preserve"><value>Highlight retainers that have items needing an update.</value></data>
+  <data name="Setting.HighlightRetainerSellList.Help" xml:space="preserve"><value>Highlight items that need an update in the retainer sell list.</value></data>
+  <data name="Setting.ItemUpdatePeriod.Help" xml:space="preserve"><value>How many minutes before an item price is considered stale.</value></data>
+  <data name="Setting.RetainerOverlayCollapsed.Help" xml:space="preserve"><value>Whether the retainer overlay starts collapsed.</value></data>
+  <data name="Setting.RoundTo.Help" xml:space="preserve"><value>Round the recommended price to a multiple of this value.</value></data>
+  <data name="Setting.RoundUpDown.Help" xml:space="preserve"><value>Choose whether recommended prices round up or down.</value></data>
+  <data name="Setting.ShowRetainerOverlay.Help" xml:space="preserve"><value>Show the retainer overlay while using retainer windows.</value></data>
+  <data name="Setting.UndercutAllowFallback.Help" xml:space="preserve"><value>Allow calculating a fallback price from the lowest NQ listing.</value></data>
+  <data name="Setting.UndercutBy.Help" xml:space="preserve"><value>How many gil to subtract from the lowest market price.</value></data>
+  <data name="Setting.UndercutComparison.Help" xml:space="preserve"><value>Choose which quality listings are compared when detecting undercuts.</value></data>
+  <data name="Setting.ViewMode.Help" xml:space="preserve"><value>Choose a grid or list layout for sales and sold items.</value></data>
+  <data name="Setting.ViewMode.Choice.Grid" xml:space="preserve"><value>Grid</value></data>
+  <data name="Setting.ViewMode.Choice.List" xml:space="preserve"><value>List</value></data>
+  <data name="Setting.UndercutComparison.Choice.Any" xml:space="preserve"><value>Any</value></data>
+  <data name="Setting.UndercutComparison.Choice.MatchingQuality" xml:space="preserve"><value>Matches Quality</value></data>
+  <data name="Setting.UndercutComparison.Choice.NqOnly" xml:space="preserve"><value>NQ Only</value></data>
+  <data name="Setting.UndercutComparison.Choice.HqOnly" xml:space="preserve"><value>HQ Only</value></data>
+  <data name="Setting.UndercutGrouping.Choice.Individual" xml:space="preserve"><value>Individually</value></data>
+  <data name="Setting.UndercutGrouping.Choice.Together" xml:space="preserve"><value>All Together</value></data>
+  <data name="Setting.UndercutGrouping.Choice.GroupByItem" xml:space="preserve"><value>By Item</value></data>
+  <data name="Setting.UndercutGrouping.Choice.GroupByRetainer" xml:space="preserve"><value>By Retainer</value></data>
+  <data name="Setting.ChatNotifyUndercutLoginCharacter.Choice.OnlyActiveCharacter" xml:space="preserve"><value>Only active character's retainers</value></data>
+  <data name="Setting.ChatNotifyUndercutLoginCharacter.Choice.AllCharacters" xml:space="preserve"><value>All retainers</value></data>
+  <data name="ChatType.None" xml:space="preserve"><value>None</value></data>
+  <data name="ChatType.Debug" xml:space="preserve"><value>Debug</value></data>
+  <data name="ChatType.Urgent" xml:space="preserve"><value>Urgent</value></data>
+  <data name="ChatType.Notice" xml:space="preserve"><value>Notice</value></data>
+  <data name="ChatType.Say" xml:space="preserve"><value>Say</value></data>
+  <data name="ChatType.Shout" xml:space="preserve"><value>Shout</value></data>
+  <data name="ChatType.TellOutgoing" xml:space="preserve"><value>Tell (Outgoing)</value></data>
+  <data name="ChatType.TellIncoming" xml:space="preserve"><value>Tell (Incoming)</value></data>
+  <data name="ChatType.Party" xml:space="preserve"><value>Party</value></data>
+  <data name="ChatType.Alliance" xml:space="preserve"><value>Alliance</value></data>
+  <data name="ChatType.Ls1" xml:space="preserve"><value>Linkshell 1</value></data>
+  <data name="ChatType.Ls2" xml:space="preserve"><value>Linkshell 2</value></data>
+  <data name="ChatType.Ls3" xml:space="preserve"><value>Linkshell 3</value></data>
+  <data name="ChatType.Ls4" xml:space="preserve"><value>Linkshell 4</value></data>
+  <data name="ChatType.Ls5" xml:space="preserve"><value>Linkshell 5</value></data>
+  <data name="ChatType.Ls6" xml:space="preserve"><value>Linkshell 6</value></data>
+  <data name="ChatType.Ls7" xml:space="preserve"><value>Linkshell 7</value></data>
+  <data name="ChatType.Ls8" xml:space="preserve"><value>Linkshell 8</value></data>
+  <data name="ChatType.FreeCompany" xml:space="preserve"><value>Free Company</value></data>
+  <data name="ChatType.NoviceNetwork" xml:space="preserve"><value>Novice Network</value></data>
+  <data name="ChatType.Yell" xml:space="preserve"><value>Yell</value></data>
+  <data name="ChatType.CrossParty" xml:space="preserve"><value>Cross-world Party</value></data>
+  <data name="ChatType.PvPTeam" xml:space="preserve"><value>PvP Team</value></data>
+  <data name="ChatType.Echo" xml:space="preserve"><value>Echo</value></data>
+  <data name="Main.DeleteCharacter" xml:space="preserve"><value>Delete Character</value></data>
+  <data name="Main.DeleteCharacterConfirm" xml:space="preserve"><value>Delete Character?</value></data>
+  <data name="Main.DeleteCharacterWarning" xml:space="preserve"><value>Are you sure you want to delete this character? Any retainers owned by this character will also be removed.</value></data>
+  <data name="Main.Confirm" xml:space="preserve"><value>Confirm</value></data>
+  <data name="Main.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Main.NoCharacters" xml:space="preserve"><value>No characters found. Please log in.</value></data>
+  <data name="Main.NoWorlds" xml:space="preserve"><value>No worlds found. Please log in.</value></data>
+  <data name="Main.LeftClickSelect" xml:space="preserve"><value>Left Click: Select/Unselect</value></data>
+  <data name="Main.RightClickMenu" xml:space="preserve"><value>Right Click: Menu</value></data>
+  <data name="Main.ArrowCollapse" xml:space="preserve"><value>Arrow: Collapse/Uncollapse</value></data>
+  <data name="Main.Class" xml:space="preserve"><value>Class: {0}</value></data>
+  <data name="Main.UnknownClass" xml:space="preserve"><value>Unknown Class</value></data>
+  <data name="Main.Level" xml:space="preserve"><value>Level: {0}</value></data>
+  <data name="Main.CurrentlySelling" xml:space="preserve"><value>Currently Selling</value></data>
+  <data name="Main.CurrentlySellingTooltip" xml:space="preserve"><value>These are the items you currently have for sale.</value></data>
+  <data name="Main.SaleHistory" xml:space="preserve"><value>Sale History</value></data>
+  <data name="Main.SaleHistoryTooltip" xml:space="preserve"><value>These are the items that you have sold.</value></data>
+  <data name="Main.SaleSummary" xml:space="preserve"><value>Sale Summary</value></data>
+  <data name="Main.SaleSummaryTooltip" xml:space="preserve"><value>Provides a groupable list of items you have sold over a given period.</value></data>
+  <data name="Main.NoSalesTracked" xml:space="preserve"><value>No sales tracked yet. Please visit a retainer to perform an initial scan of their sales.</value></data>
+  <data name="Main.EmptySlot" xml:space="preserve"><value>Empty Slot</value></data>
+  <data name="Main.UnknownCharacter" xml:space="preserve"><value>Unknown Character</value></data>
+  <data name="Main.UnknownCharacterRetainer" xml:space="preserve"><value>Unknown Character/Retainer</value></data>
+  <data name="Main.UnknownWorld" xml:space="preserve"><value>Unknown World</value></data>
+  <data name="Main.Unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="Main.UndercutBy" xml:space="preserve"><value>You have been undercut on this item by {0}</value></data>
+  <data name="Main.Listed" xml:space="preserve"><value>Listed: {0}</value></data>
+  <data name="Main.Updated" xml:space="preserve"><value>Updated: {0}</value></data>
+  <data name="Main.LatestData" xml:space="preserve"><value>Latest Data:</value></data>
+  <data name="Main.Source" xml:space="preserve"><value>Source: {0}</value></data>
+  <data name="Main.UnitPriceNq" xml:space="preserve"><value>Unit Price NQ: {0}</value></data>
+  <data name="Main.UnitPriceHq" xml:space="preserve"><value>Unit Price HQ: {0}</value></data>
+  <data name="Main.Search" xml:space="preserve"><value>Search</value></data>
+  <data name="Main.SearchLabel" xml:space="preserve"><value>Search:</value></data>
+  <data name="Main.ClearSearch" xml:space="preserve"><value>Clear search</value></data>
+  <data name="Main.ShowEmptySlots" xml:space="preserve"><value>Show empty slots:</value></data>
+  <data name="Main.DateRange" xml:space="preserve"><value>Date Range</value></data>
+  <data name="Main.SinceToday" xml:space="preserve"><value>Since Today</value></data>
+  <data name="Main.ToggleSearchBar" xml:space="preserve"><value>Toggle search bar</value></data>
+  <data name="Main.RetainerOpenedBeforePlugin" xml:space="preserve"><value>It looks like you opened your retainer before this plugin loaded. Please go back to the retainer list and reopen the retainer. This can happen after updating or installing the plugin.</value></data>
+  <data name="Main.SalesStatus" xml:space="preserve"><value>{0} items for sale on {1} worth {2}</value></data>
+  <data name="Main.SoldStatus" xml:space="preserve"><value>{0} items sold on {1} worth {2}</value></data>
+  <data name="Main.GilStored" xml:space="preserve"><value>{0} has {1} stored.</value></data>
+  <data name="Main.SoldOn" xml:space="preserve"><value>Sold on {0}</value></data>
+  <data name="Main.QuantityAt" xml:space="preserve"><value>{0} at {1} ({2})</value></data>
+  <data name="Column.Icon" xml:space="preserve"><value>Icon</value></data>
+  <data name="Column.Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Column.Quantity" xml:space="preserve"><value>Quantity</value></data>
+  <data name="Column.UnitPrice" xml:space="preserve"><value>Unit Price</value></data>
+  <data name="Column.World" xml:space="preserve"><value>World</value></data>
+  <data name="Column.Retainer" xml:space="preserve"><value>Retainer</value></data>
+  <data name="Column.UndercutBy" xml:space="preserve"><value>Undercut by</value></data>
+  <data name="Column.ListedAt" xml:space="preserve"><value>Listed At</value></data>
+  <data name="Column.UpdatedAt" xml:space="preserve"><value>Updated At</value></data>
+  <data name="Column.SoldAt" xml:space="preserve"><value>Sold At</value></data>
+  <data name="Column.IsHQ" xml:space="preserve"><value>Is HQ?</value></data>
+  <data name="Column.AverageSalePrice" xml:space="preserve"><value>Avg. Sale Price</value></data>
+  <data name="Column.Tax" xml:space="preserve"><value>Tax </value></data>
+  <data name="Column.Total" xml:space="preserve"><value>Total </value></data>
+  <data name="Main.SaleSummaryGroup" xml:space="preserve"><value>Sale Summary Group</value></data>
+  <data name="Main.SaleSummaryGroupHelp" xml:space="preserve"><value>What to group the sale summary by</value></data>
+  <data name="Main.GroupBy" xml:space="preserve"><value>Group by {0}</value></data>
+  <data name="Main.SaleSummaryDateRange" xml:space="preserve"><value>Sale Summary Date Range</value></data>
+  <data name="Main.SaleSummaryDateRangeHelp" xml:space="preserve"><value>Sets the date range for the sale summary results.</value></data>
+  <data name="Main.SaleSummaryTimeSpan" xml:space="preserve"><value>Sale Summary Time Span</value></data>
+  <data name="SaleSummaryGroup.None" xml:space="preserve"><value>None</value></data>
+  <data name="SaleSummaryGroup.Item" xml:space="preserve"><value>Item</value></data>
+  <data name="SaleSummaryGroup.World" xml:space="preserve"><value>World</value></data>
+  <data name="SaleSummaryGroup.IsHq" xml:space="preserve"><value>Is HQ</value></data>
+  <data name="SaleSummaryGroup.Owner" xml:space="preserve"><value>Owner</value></data>
+  <data name="SaleSummaryGroup.Retainer" xml:space="preserve"><value>Retainer</value></data>
+  <data name="Notification.UndercutIndividual" xml:space="preserve"><value>You have been undercut by {0} for {1}</value></data>
+  <data name="Notification.UndercutTogether" xml:space="preserve"><value>You have been undercut on {0} items.</value></data>
+  <data name="Notification.UndercutByItem" xml:space="preserve"><value>You have been undercut by {0} on {1} {2} you are selling.</value></data>
+  <data name="Notification.UndercutByRetainer" xml:space="preserve"><value>You have been undercut on {0} items that {1} is selling.</value></data>
+  <data name="Notification.ItemSold" xml:space="preserve"><value>You sold {0} {1} for {2}</value></data>
+  <data name="Overlay.Title" xml:space="preserve"><value>Allagan Market</value></data>
+  <data name="Overlay.OpenMainWindow" xml:space="preserve"><value>Open the Allagan Market main window.</value></data>
+  <data name="Overlay.OpenConfigWindow" xml:space="preserve"><value>Open the Allagan Market configuration window.</value></data>
+  <data name="Overlay.ShowHideItems" xml:space="preserve"><value>Show/hide items that need to be updated.</value></data>
+  <data name="Overlay.ShowHideRetainers" xml:space="preserve"><value>Show/hide retainers that need to be updated.</value></data>
+  <data name="Overlay.ToggleRetainerListHighlighting" xml:space="preserve"><value>Toggle highlighting on the retainer list.</value></data>
+  <data name="Overlay.ToggleRetainerSellListHighlighting" xml:space="preserve"><value>Toggle highlighting on the retainer sell list.</value></data>
+  <data name="Overlay.ReloadedMessage" xml:space="preserve"><value>The plugin has been reloaded since entering a retainer, please back out and load back into the retainer.</value></data>
+  <data name="Overlay.Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Overlay.RecommendedUnitPrice" xml:space="preserve"><value>Rec. Unit Price</value></data>
+  <data name="Overlay.CopyToGame" xml:space="preserve"><value>Copy to Game</value></data>
+  <data name="Overlay.UpdatedAt" xml:space="preserve"><value>Updated At</value></data>
+  <data name="Overlay.ListedAt" xml:space="preserve"><value>Listed At</value></data>
+  <data name="Overlay.SourcedFrom" xml:space="preserve"><value>Sourced From: {0}</value></data>
+  <data name="Overlay.NoData" xml:space="preserve"><value>No Data</value></data>
+  <data name="Overlay.NotAvailable" xml:space="preserve"><value>N/A</value></data>
+  <data name="Overlay.PleaseLogin" xml:space="preserve"><value>Please login.</value></data>
+  <data name="Overlay.FallbackTooltip" xml:space="preserve"><value>As you have undercut fallback on, the undercut was calculated based off the lowest NQ item.</value></data>
+  <data name="Overlay.Slot" xml:space="preserve"><value>Slot</value></data>
+  <data name="Overlay.RecommendedPrice" xml:space="preserve"><value>Rec. Price</value></data>
+  <data name="Overlay.Undercut" xml:space="preserve"><value>Undercut?</value></data>
+  <data name="Overlay.StalePricing" xml:space="preserve"><value>Stale Pricing?</value></data>
+  <data name="Overlay.Empty" xml:space="preserve"><value>Empty</value></data>
+  <data name="Overlay.UnknownItem" xml:space="preserve"><value>Unknown Item</value></data>
+  <data name="Overlay.Yes" xml:space="preserve"><value>Yes</value></data>
+  <data name="Overlay.No" xml:space="preserve"><value>No</value></data>
+  <data name="Overlay.NoItemsLeft" xml:space="preserve"><value>No items left to update.</value></data>
+  <data name="Overlay.Selling" xml:space="preserve"><value>Selling</value></data>
+  <data name="Overlay.LastUpdate" xml:space="preserve"><value>Last Update</value></data>
+  <data name="Overlay.NoRetainersLeft" xml:space="preserve"><value>No retainers left to update.</value></data>
+</root>

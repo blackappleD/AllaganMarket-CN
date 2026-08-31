@@ -14,7 +14,7 @@ using ImGuiService = AllaganLib.Interface.Services.ImGuiService;
 
 namespace AllaganMarket.Tables.Columns;
 
-public class UpdatedAtColumn(ImGuiService imGuiService, StringColumnFilter stringColumnFilter, UndercutService undercutService)
+public class UpdatedAtColumn(ImGuiService imGuiService, StringColumnFilter stringColumnFilter, UndercutService undercutService, LocalizationService localization)
     : DateTimeColumn<SearchResultConfiguration, SearchResult, MessageBase>(imGuiService, stringColumnFilter)
 {
     private readonly UndercutService undercutService = undercutService;
@@ -23,7 +23,11 @@ public class UpdatedAtColumn(ImGuiService imGuiService, StringColumnFilter strin
 
     public override string Key { get; set; } = "UpdatedAt";
 
-    public override string Name { get; set; } = "Updated At";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.UpdatedAt", "Updated At");
+        set { }
+    }
 
     public override string? RenderName { get; set; } = null;
 

@@ -3,6 +3,7 @@ using System;
 using AllaganLib.Interface.Services;
 
 using AllaganMarket.Settings.Abstract;
+using LocalizationService = AllaganMarket.Services.LocalizationService;
 
 using Dalamud.Game.Text;
 
@@ -10,7 +11,7 @@ namespace AllaganMarket.Settings;
 
 public class ChatNotifyUndercutLoginChatTypeSetting : XivChatTypeFormField, ISetting
 {
-    public ChatNotifyUndercutLoginChatTypeSetting(ImGuiService imGuiService) : base(imGuiService)
+    public ChatNotifyUndercutLoginChatTypeSetting(ImGuiService imGuiService, LocalizationService localization) : base(imGuiService, localization)
     {
     }
 

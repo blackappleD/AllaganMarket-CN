@@ -5,20 +5,26 @@ using AllaganLib.Interface.Grid;
 using AllaganLib.Interface.Grid.ColumnFilters;
 using AllaganLib.Interface.Services;
 
+using LocalizationService = AllaganMarket.Services.LocalizationService;
+
 using DalaMock.Host.Mediator;
 
 using Dalamud.Bindings.ImGui;
 
 namespace AllaganMarket.Tables.Columns;
 
-public class ListedAtColumn(ImGuiService imGuiService, StringColumnFilter stringColumnFilter)
+public class ListedAtColumn(ImGuiService imGuiService, StringColumnFilter stringColumnFilter, LocalizationService localization)
     : DateTimeColumn<SearchResultConfiguration, SearchResult, MessageBase>(imGuiService, stringColumnFilter)
 {
     public override string? DefaultValue { get; set; } = null;
 
     public override string Key { get; set; } = "ListedAt";
 
-    public override string Name { get; set; } = "Listed At";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.ListedAt", "Listed At");
+        set { }
+    }
 
     public override string? RenderName { get; set; } = null;
 

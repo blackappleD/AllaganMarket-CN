@@ -20,6 +20,7 @@ using AllaganLib.Universalis.Models;
 using AllaganLib.Universalis.Services;
 
 using AllaganMarket.Filtering;
+using AllaganMarket.Localization;
 using AllaganMarket.Models;
 using AllaganMarket.Services;
 using AllaganMarket.Services.Interfaces;
@@ -28,6 +29,7 @@ using AllaganMarket.Settings.Layout;
 using AllaganMarket.Tables;
 using AllaganMarket.Tables.Fields;
 using AllaganMarket.Windows;
+using AllaganMarket.Widgets;
 
 using Autofac;
 
@@ -161,6 +163,7 @@ public class AllaganMarketPlugin : HostedPlugin
         containerBuilder.RegisterSingletonSelfAndInterfaces<BackgroundTaskCollector>();
         containerBuilder.RegisterTransientSelfAndInterfaces<BackgroundTaskQueue>();
         containerBuilder.RegisterType<SettingTypeConfiguration>().SingleInstance();
+        containerBuilder.RegisterType<LocalizationService>().SingleInstance();
         containerBuilder.RegisterType<ImGuiMenus>().SingleInstance();
         containerBuilder.RegisterType<CsvLoaderService>().SingleInstance();
         containerBuilder.RegisterType<ImGuiService>().AsSelf().As<AllaganLib.Interface.Services.ImGuiService>()
@@ -203,8 +206,7 @@ public class AllaganMarketPlugin : HostedPlugin
         containerBuilder.RegisterType<SaleSummary>();
         containerBuilder.Register(
             c => new WizardWidgetSettings() { PluginName = "Allagan Market", LogoPath = "logo_small" });
-        containerBuilder.RegisterType<WizardWidget<Configuration>>().AsSelf().AsImplementedInterfaces()
-                        .SingleInstance();
+        containerBuilder.RegisterType<LocalizedWizardWidget<Configuration>>().AsSelf().SingleInstance();
         containerBuilder.RegisterType<ConfigurationWizardService<Configuration>>().AsSelf().AsImplementedInterfaces()
                         .SingleInstance();
         containerBuilder.RegisterType<TimeSpanHumanizerCache>();

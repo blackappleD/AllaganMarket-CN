@@ -39,6 +39,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
     private readonly IRetainerMarketService retainerMarketService;
     private readonly UndercutService undercutService;
     private readonly HighlightingRetainerSellListSetting retainerSellListSetting;
+    private readonly LocalizationService localization;
     private bool showAllItems;
 
     public RetainerSellListOverlayWindow(
@@ -58,7 +59,8 @@ public class RetainerSellListOverlayWindow : OverlayWindow
         ShowRetainerOverlaySetting retainerOverlaySetting,
         IRetainerMarketService retainerMarketService,
         UndercutService undercutService,
-        HighlightingRetainerSellListSetting retainerSellListSetting)
+        HighlightingRetainerSellListSetting retainerSellListSetting,
+        LocalizationService localization)
         : base(addonLifecycle, gameGui, logger, mediator, imGuiService, "Retainer Sell List Overlay")
     {
         this.characterMonitorService = characterMonitorService;
@@ -73,6 +75,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
         this.retainerMarketService = retainerMarketService;
         this.undercutService = undercutService;
         this.retainerSellListSetting = retainerSellListSetting;
+        this.localization = localization;
         this.AttachAddon("RetainerSellList", AttachPosition.Right);
         this.Flags = ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoResize;
         this.RespectCloseHotkey = false;
@@ -126,7 +129,8 @@ public class RetainerSellListOverlayWindow : OverlayWindow
         }
 
         ImGui.SameLine();
-        ImGui.Text("Allagan Market");
+        this.localization.RefreshFromConfiguration();
+        ImGui.Text(this.localization.Get("Overlay.Title"));
 
         ImGui.SameLine();
 
@@ -136,7 +140,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                 this.font,
                 FontAwesomeIcon.Bars,
                 ref currentCursorPosX,
-                "Open the Allagan Market main window.",
+                this.localization.Get("Overlay.OpenMainWindow"),
                 true))
         {
             this.MediatorService.Publish(new ToggleWindowMessage(typeof(MainWindow)));
@@ -148,7 +152,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                 this.font,
                 FontAwesomeIcon.Cog,
                 ref currentCursorPosX,
-                "Open the Allagan Market configuration window.",
+                this.localization.Get("Overlay.OpenConfigWindow"),
                 true))
         {
             this.MediatorService.Publish(new ToggleWindowMessage(typeof(ConfigWindow)));
@@ -160,7 +164,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                 this.font,
                 FontAwesomeIcon.Eye,
                 ref currentCursorPosX,
-                "Show/hide items that need to be updated.",
+                this.localization.Get("Overlay.ShowHideItems"),
                 true,
                 this.showAllItems ? null : ImGuiColors.ParsedGrey))
         {
@@ -174,7 +178,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                 this.font,
                 FontAwesomeIcon.Lightbulb,
                 ref currentCursorPosX,
-                "Toggle highlighting on the retainer list.",
+                this.localization.Get("Overlay.ToggleRetainerSellListHighlighting"),
                 true,
                 retainerHighlighting ? null : ImGuiColors.ParsedGrey))
         {
@@ -188,7 +192,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
         {
             ImGui.PushTextWrapPos();
             ImGui.Text(
-                "The plugin has been reloaded since entering a retainer, please back out and load back into the retainer.");
+                this.localization.Get("Overlay.ReloadedMessage"));
             ImGui.PopTextWrapPos();
             return;
         }
@@ -203,22 +207,22 @@ public class RetainerSellListOverlayWindow : OverlayWindow
 
             using (ImRaii.Table("ItemList", 5, ImGuiTableFlags.SizingFixedFit))
             {
-                ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch, 140 * ImGui.GetIO().FontGlobalScale);
-                ImGui.TableSetupColumn("Slot", ImGuiTableColumnFlags.WidthFixed, 40 * ImGui.GetIO().FontGlobalScale);
-                ImGui.TableSetupColumn("Rec. Price", ImGuiTableColumnFlags.WidthFixed, 80 * ImGui.GetIO().FontGlobalScale);
-                ImGui.TableSetupColumn("Undercut", ImGuiTableColumnFlags.WidthFixed, 70 * ImGui.GetIO().FontGlobalScale);
-                ImGui.TableSetupColumn("Stale Pricing?", ImGuiTableColumnFlags.WidthFixed, 110 * ImGui.GetIO().FontGlobalScale);
+                ImGui.TableSetupColumn(this.localization.Get("Overlay.Name"), ImGuiTableColumnFlags.WidthStretch, 140 * ImGui.GetIO().FontGlobalScale);
+                ImGui.TableSetupColumn(this.localization.Get("Overlay.Slot"), ImGuiTableColumnFlags.WidthFixed, 40 * ImGui.GetIO().FontGlobalScale);
+                ImGui.TableSetupColumn(this.localization.Get("Overlay.RecommendedPrice"), ImGuiTableColumnFlags.WidthFixed, 80 * ImGui.GetIO().FontGlobalScale);
+                ImGui.TableSetupColumn(this.localization.Get("Overlay.Undercut"), ImGuiTableColumnFlags.WidthFixed, 70 * ImGui.GetIO().FontGlobalScale);
+                ImGui.TableSetupColumn(this.localization.Get("Overlay.StalePricing"), ImGuiTableColumnFlags.WidthFixed, 110 * ImGui.GetIO().FontGlobalScale);
                 ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
                 ImGui.TableNextColumn();
-                ImGui.Text("Name");
+                ImGui.Text(this.localization.Get("Overlay.Name"));
                 ImGui.TableNextColumn();
-                ImGui.Text("Slot");
+                ImGui.Text(this.localization.Get("Overlay.Slot"));
                 ImGui.TableNextColumn();
-                ImGui.Text("Rec. Price");
+                ImGui.Text(this.localization.Get("Overlay.RecommendedPrice"));
                 ImGui.TableNextColumn();
-                ImGui.Text("Undercut?");
+                ImGui.Text(this.localization.Get("Overlay.Undercut"));
                 ImGui.TableNextColumn();
-                ImGui.Text("Stale Pricing?");
+                ImGui.Text(this.localization.Get("Overlay.StalePricing"));
                 if (saleItems != null)
                 {
                     for (var index = 0; index < saleItems.Count; index++)
@@ -232,7 +236,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                         }
 
                         var recommendedUnitPrice = this.undercutService.GetRecommendedUnitPrice(saleItem);
-                        var recommendedPrice = recommendedUnitPrice == null ? "No Data" : recommendedUnitPrice.Value.Amount.ToString();
+                        var recommendedPrice = recommendedUnitPrice == null ? this.localization.Get("Overlay.NoData") : recommendedUnitPrice.Value.Amount.ToString();
 
                         itemsToCheck = true;
                         ImGui.TableNextRow();
@@ -245,8 +249,8 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                         ImGui.TableNextColumn();
                         ImGui.Text(
                             saleItem.IsEmpty()
-                                ? "Empty"
-                                : this.itemSheet.GetRowOrDefault(saleItem.ItemId)?.Name.ExtractText() ?? "Unknown Item");
+                                ? this.localization.Get("Overlay.Empty")
+                                : this.itemSheet.GetRowOrDefault(saleItem.ItemId)?.Name.ExtractText() ?? this.localization.Get("Overlay.UnknownItem"));
                         green.Pop();
                         yellow.Pop();
                         red.Pop();
@@ -260,24 +264,24 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                         ImGui.Text(recommendedPrice.ToString());
 
                         ImGui.TableNextColumn();
-                        ImGui.Text(saleItem.IsEmpty() ? "N/A" : isUnderCut ? "Yes" : "No");
+                        ImGui.Text(saleItem.IsEmpty() ? this.localization.Get("Overlay.NotAvailable") : isUnderCut ? this.localization.Get("Overlay.Yes") : this.localization.Get("Overlay.No"));
 
                         ImGui.TableNextColumn();
-                        var needsUpdateText = needsUpdate ? "Yes" : "No";
+                        var needsUpdateText = needsUpdate ? this.localization.Get("Overlay.Yes") : this.localization.Get("Overlay.No");
 
-                        ImGui.Text(saleItem.IsEmpty() ? "N/A" : needsUpdateText);
+                        ImGui.Text(saleItem.IsEmpty() ? this.localization.Get("Overlay.NotAvailable") : needsUpdateText);
                     }
                 }
             }
 
             if (!itemsToCheck)
             {
-                ImGui.Text("No items left to update.");
+                ImGui.Text(this.localization.Get("Overlay.NoItemsLeft"));
             }
         }
         else
         {
-            ImGui.Text("Please login.");
+            ImGui.Text(this.localization.Get("Overlay.PleaseLogin"));
         }
     }
 }

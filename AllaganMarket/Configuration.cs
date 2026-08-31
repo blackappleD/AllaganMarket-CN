@@ -7,6 +7,7 @@ using AllaganLib.Interface.FormFields;
 using AllaganLib.Interface.Wizard;
 
 using AllaganMarket.Models;
+using AllaganMarket.Localization;
 using AllaganMarket.Settings;
 
 using Dalamud.Configuration;
@@ -20,6 +21,7 @@ namespace AllaganMarket;
 public class Configuration : IPluginConfiguration, IConfigurable<int?>, IConfigurable<bool?>, IConfigurable<Enum?>,
                              IWizardConfiguration
 {
+    private PluginLanguage language = PluginLanguage.Auto;
     private HashSet<string>? wizardVersionsSeen1;
     private bool isConfigWindowMovable = true;
     private Dictionary<ulong, Character> characters = [];
@@ -39,6 +41,12 @@ public class Configuration : IPluginConfiguration, IConfigurable<int?>, IConfigu
     {
         get => this.isConfigWindowMovable;
         set => this.isConfigWindowMovable = value;
+    }
+
+    public PluginLanguage Language
+    {
+        get => this.language;
+        set => this.language = value;
     }
 
     public Dictionary<ulong, Character> Characters

@@ -4,6 +4,7 @@ using AllaganLib.Interface.Grid;
 using AllaganLib.Interface.Grid.ColumnFilters;
 
 using AllaganMarket.Models;
+using LocalizationService = AllaganMarket.Services.LocalizationService;
 using AllaganMarket.Services.Interfaces;
 
 using DalaMock.Host.Mediator;
@@ -22,7 +23,8 @@ public class NameColumn(
     StringColumnFilter stringColumnFilter,
     ExcelSheet<Item> itemSheet,
     ExcelSheet<World> worldSheet,
-    ICharacterMonitorService characterMonitorService)
+    ICharacterMonitorService characterMonitorService,
+    LocalizationService localization)
     : StringColumn<SearchResultConfiguration, SearchResult, MessageBase>(imGuiService, stringColumnFilter)
 {
     private readonly Dictionary<SaleSummaryKey, string> formattedNames = [];
@@ -31,7 +33,11 @@ public class NameColumn(
 
     public override string Key { get; set; } = "Name";
 
-    public override string Name { get; set; } = "Name";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.Name", "Name");
+        set { }
+    }
 
     public override string? RenderName { get; set; } = null;
 

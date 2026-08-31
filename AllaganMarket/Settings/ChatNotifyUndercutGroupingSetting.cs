@@ -8,6 +8,14 @@ namespace AllaganMarket.Settings;
 
 public class ChatNotifyUndercutGroupingSetting : EnumFormField<ChatNotifyUndercutGrouping, Configuration>, ISetting
 {
+    private readonly Dictionary<Enum, string> choices = new()
+    {
+        { ChatNotifyUndercutGrouping.Individual, "Individually" },
+        { ChatNotifyUndercutGrouping.Together, "All Together" },
+        { ChatNotifyUndercutGrouping.GroupByItem, "By Item" },
+        { ChatNotifyUndercutGrouping.GroupByRetainer, "By Retainer" },
+    };
+
     public ChatNotifyUndercutGroupingSetting(ImGuiService imGuiService)
         : base(imGuiService)
     {
@@ -29,13 +37,7 @@ public class ChatNotifyUndercutGroupingSetting : EnumFormField<ChatNotifyUndercu
         return Equals(item1, item2);
     }
 
-    public override Dictionary<Enum, string> Choices => new()
-    {
-        { ChatNotifyUndercutGrouping.Individual, "Individually"},
-        { ChatNotifyUndercutGrouping.Together, "All Together"},
-        { ChatNotifyUndercutGrouping.GroupByItem, "By Item"},
-        { ChatNotifyUndercutGrouping.GroupByRetainer, "By Retainer"},
-    };
+    public override Dictionary<Enum, string> Choices => this.choices;
 
     public SettingType Type { get; set; } = SettingType.Chat;
 

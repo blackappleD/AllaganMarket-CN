@@ -43,6 +43,7 @@ namespace AllaganMarket.Windows;
 
 public class MainWindow : ExtendedWindow
 {
+    private readonly LocalizationService localization;
     private readonly ExcelSheet<Item> itemSheet;
     private readonly ExcelSheet<ClassJob> classJobSheet;
     private readonly IPluginLog pluginLog;
@@ -79,6 +80,7 @@ public class MainWindow : ExtendedWindow
     public MainWindow(
         MediatorService mediatorService,
         ImGuiService imGuiService,
+        LocalizationService localization,
         Configuration configuration,
         ITextureProvider textureProvider,
         ConfigWindow configWindow,
@@ -104,8 +106,9 @@ public class MainWindow : ExtendedWindow
         UndercutService undercutService,
         TimeSpanHumanizerCache humanizerCache,
         ImGuiMenus imGuiMenus)
-        : base(mediatorService, imGuiService, "Allagan Market##AllaganMarkets")
+        : base(mediatorService, imGuiService, localization.Get("Window.Main.Title") + "##AllaganMarkets")
     {
+        this.localization = localization;
         this.pluginLog = pluginLog;
         this.saleFilter = saleFilter;
         this.gilNumberFormat = gilNumberFormat;
@@ -205,21 +208,22 @@ public class MainWindow : ExtendedWindow
 
     public override void Draw()
     {
+        this.localization.RefreshFromConfiguration();
         if (ImGui.BeginMenuBar())
         {
-            if (ImGui.BeginMenu("File"))
+            if (ImGui.BeginMenu(this.localization.Get("Menu.File")))
             {
-                if (ImGui.MenuItem("Configuration"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.Configuration")))
                 {
                     this.MediatorService.Publish(new OpenWindowMessage(typeof(ConfigWindow)));
                 }
 
-                if (ImGui.MenuItem("Report a Issue"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.ReportIssue")))
                 {
                     "https://github.com/Critical-Impact/AllaganMarket".OpenBrowser();
                 }
 
-                if (ImGui.MenuItem("Enable Verbose Logging", "", this.pluginLog.MinimumLogLevel == LogEventLevel.Verbose))
+                if (ImGui.MenuItem(this.localization.Get("Menu.VerboseLogging"), "", this.pluginLog.MinimumLogLevel == LogEventLevel.Verbose))
                 {
                     if (this.pluginLog.MinimumLogLevel == LogEventLevel.Verbose)
                     {
@@ -232,12 +236,12 @@ public class MainWindow : ExtendedWindow
                 }
 
 
-                if (ImGui.MenuItem("Ko-Fi"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.KoFi")))
                 {
                     "https://ko-fi.com/critical_impact".OpenBrowser();
                 }
 
-                if (ImGui.MenuItem("Close"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.Close")))
                 {
                     this.IsOpen = false;
                 }
@@ -245,9 +249,9 @@ public class MainWindow : ExtendedWindow
                 ImGui.EndMenu();
             }
 
-            if (ImGui.BeginMenu("Edit"))
+            if (ImGui.BeginMenu(this.localization.Get("Menu.Edit")))
             {
-                if (ImGui.MenuItem("Mark all visible sale items as updated"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.MarkVisibleUpdated")))
                 {
                     var saleItems = this.saleItemTable.GetFilteredItems(this.saleItemSearchConfiguration);
                     foreach (var saleItem in saleItems)
@@ -259,15 +263,15 @@ public class MainWindow : ExtendedWindow
                 ImGui.EndMenu();
             }
 
-            if (ImGui.BeginMenu("View"))
+            if (ImGui.BeginMenu(this.localization.Get("Menu.View")))
             {
                 var currentViewMode = this.viewModeSetting.CurrentValue(this.Configuration);
-                if (ImGui.MenuItem("Grid" + (currentViewMode == ViewMode.Grid ? " (Active)" : string.Empty)))
+                if (ImGui.MenuItem(this.localization.Get("Menu.Grid") + (currentViewMode == ViewMode.Grid ? this.localization.Get("Menu.ActiveSuffix") : string.Empty)))
                 {
                     this.viewModeSetting.UpdateFilterConfiguration(this.Configuration, ViewMode.Grid);
                 }
 
-                if (ImGui.MenuItem("List" + (currentViewMode == ViewMode.List ? " (Active)" : string.Empty)))
+                if (ImGui.MenuItem(this.localization.Get("Menu.List") + (currentViewMode == ViewMode.List ? this.localization.Get("Menu.ActiveSuffix") : string.Empty)))
                 {
                     this.viewModeSetting.UpdateFilterConfiguration(this.Configuration, ViewMode.List);
                 }
@@ -275,9 +279,9 @@ public class MainWindow : ExtendedWindow
                 ImGui.EndMenu();
             }
 
-            if (ImGui.BeginMenu("Export"))
+            if (ImGui.BeginMenu(this.localization.Get("Menu.Export")))
             {
-                if (ImGui.MenuItem("Export Current Sales"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.ExportCurrentSales")))
                 {
                     this.fileDialogManager.SaveFileDialog(
                         "Select a save location",
@@ -298,7 +302,7 @@ public class MainWindow : ExtendedWindow
                         });
                 }
 
-                if (ImGui.MenuItem("Export Current Sales (Filtered)"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.ExportCurrentSalesFiltered")))
                 {
                     this.fileDialogManager.SaveFileDialog(
                         "Select a save location",
@@ -321,7 +325,7 @@ public class MainWindow : ExtendedWindow
 
                 ImGui.Separator();
 
-                if (ImGui.MenuItem("Export History (CSV)"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.ExportHistory")))
                 {
                     this.fileDialogManager.SaveFileDialog(
                         "Select a save location",
@@ -342,7 +346,7 @@ public class MainWindow : ExtendedWindow
                         });
                 }
 
-                if (ImGui.MenuItem("Export History (Filtered)"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.ExportHistoryFiltered")))
                 {
                     this.fileDialogManager.SaveFileDialog(
                         "Select a save location",
@@ -365,7 +369,7 @@ public class MainWindow : ExtendedWindow
 
                 ImGui.Separator();
 
-                if (ImGui.MenuItem("Export Sales Summary (CSV)"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.ExportSummary")))
                 {
                     this.fileDialogManager.SaveFileDialog(
                         "Select a save location",
@@ -386,7 +390,7 @@ public class MainWindow : ExtendedWindow
                         });
                 }
 
-                if (ImGui.MenuItem("Export Sales Summary (Filtered)"))
+                if (ImGui.MenuItem(this.localization.Get("Menu.ExportSummaryFiltered")))
                 {
                     this.fileDialogManager.SaveFileDialog(
                         "Select a save location",
@@ -534,9 +538,9 @@ public class MainWindow : ExtendedWindow
 
         ImGui.Text(character.Name);
         ImGui.Separator();
-        if (ImGui.Selectable("Delete Character"))
+        if (ImGui.Selectable(this.localization.Get("Main.DeleteCharacter")))
         {
-            return "Delete Character?##dc_" + character.CharacterId;
+            return this.localization.Get("Main.DeleteCharacterConfirm") + "##dc_" + character.CharacterId;
         }
 
         return null;
@@ -546,7 +550,7 @@ public class MainWindow : ExtendedWindow
     {
         var open = true;
         using var popupModal = ImRaii.PopupModal(
-            "Delete Character?##dc_" + character.CharacterId,
+            this.localization.Get("Main.DeleteCharacterConfirm") + "##dc_" + character.CharacterId,
             ref open,
             ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove);
         if (!popupModal)
@@ -554,9 +558,8 @@ public class MainWindow : ExtendedWindow
             return;
         }
 
-        ImGui.TextUnformatted(
-            "Are you sure you want to delete this character? Any retainers owned by this retainer will also be removed.");
-        if (ImGui.Button("Confirm"))
+        ImGui.TextUnformatted(this.localization.Get("Main.DeleteCharacterWarning"));
+        if (ImGui.Button(this.localization.Get("Main.Confirm")))
         {
             this.CharacterMonitorService.RemoveCharacter(character.CharacterId);
             if (character.CharacterId == this.saleFilter.CharacterId)
@@ -568,7 +571,7 @@ public class MainWindow : ExtendedWindow
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel"))
+        if (ImGui.Button(this.localization.Get("Main.Cancel")))
         {
             ImGui.CloseCurrentPopup();
         }
@@ -585,13 +588,13 @@ public class MainWindow : ExtendedWindow
                 {
                     if (this.CharacterMonitorService.Characters.Count == 0)
                     {
-                        ImGui.TextWrapped("No characters found. Please login.");
+                        ImGui.TextWrapped(this.localization.Get("Main.NoCharacters"));
                     }
 
                     var worlds = this.CharacterMonitorService.GetWorldIds(CharacterType.Character);
                     if (worlds.Count == 0)
                     {
-                        ImGui.TextWrapped("No worlds found. Please login.");
+                        ImGui.TextWrapped(this.localization.Get("Main.NoWorlds"));
                     }
 
                     foreach (var worldId in worlds)
@@ -609,8 +612,8 @@ public class MainWindow : ExtendedWindow
                         {
                             using (ImRaii.Tooltip())
                             {
-                                ImGui.Text("Left Click: Select/Unselect");
-                                ImGui.Text("Arrow: Collapse/Uncollapse");
+                                ImGui.Text(this.localization.Get("Main.LeftClickSelect"));
+                                ImGui.Text(this.localization.Get("Main.ArrowCollapse"));
                             }
                         }
 
@@ -648,8 +651,8 @@ public class MainWindow : ExtendedWindow
                                 {
                                     using (ImRaii.Tooltip())
                                     {
-                                        ImGui.Text("Left Click: Select/Unselect");
-                                        ImGui.Text("Right Click: Menu");
+                                        ImGui.Text(this.localization.Get("Main.LeftClickSelect"));
+                                        ImGui.Text(this.localization.Get("Main.RightClickMenu"));
                                     }
 
                                     if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
@@ -712,10 +715,10 @@ public class MainWindow : ExtendedWindow
                                                 ImGui.Text(retainer.Name);
                                                 ImGui.Separator();
                                                 ImGui.Text(
-                                                    $"Class: {this.classJobSheet.GetRowOrDefault(retainer.ClassJobId)?.Abbreviation.ExtractText() ?? "Unknown Class"}");
-                                                ImGui.Text($"Level: {retainer.Level}");
-                                                ImGui.Text("Left Click: Select/Unselect");
-                                                ImGui.Text("Right Click: Menu");
+                                                    this.localization.Format("Main.Class", this.classJobSheet.GetRowOrDefault(retainer.ClassJobId)?.Abbreviation.ExtractText() ?? this.localization.Get("Main.UnknownClass")));
+                                                ImGui.Text(this.localization.Format("Main.Level", retainer.Level));
+                                                ImGui.Text(this.localization.Get("Main.LeftClickSelect"));
+                                                ImGui.Text(this.localization.Get("Main.RightClickMenu"));
                                             }
 
                                             if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
@@ -765,34 +768,34 @@ public class MainWindow : ExtendedWindow
                     using var tabBar = ImRaii.TabBar("mainTabs");
                     if (tabBar)
                     {
-                        using (var currentSales = ImRaii.TabItem("Currently Selling"))
+                        using (var currentSales = ImRaii.TabItem(this.localization.Get("Main.CurrentlySelling")))
                         {
                             if (currentSales)
                             {
-                                ImGuiService.HoverTooltip("These are the items you currently have for sale.");
+                                ImGuiService.HoverTooltip(this.localization.Get("Main.CurrentlySellingTooltip"));
                                 this.SelectedTab = MainWindowTab.CurrentlySelling;
                                 this.DrawButtonBar();
                                 this.DrawCurrentlySelling();
                             }
                         }
 
-                        using (var recentSales = ImRaii.TabItem("Sale History"))
+                        using (var recentSales = ImRaii.TabItem(this.localization.Get("Main.SaleHistory")))
                         {
                             if (recentSales)
                             {
-                                ImGuiService.HoverTooltip("These are the items that you have sold.");
+                                ImGuiService.HoverTooltip(this.localization.Get("Main.SaleHistoryTooltip"));
                                 this.SelectedTab = MainWindowTab.SalesHistory;
                                 this.DrawButtonBar();
                                 this.DrawSalesHistory();
                             }
                         }
 
-                        using (var recentSales = ImRaii.TabItem("Sale Summary"))
+                        using (var recentSales = ImRaii.TabItem(this.localization.Get("Main.SaleSummary")))
                         {
                             if (recentSales)
                             {
                                 ImGuiService.HoverTooltip(
-                                    "Provides a groupable list of items you have sold over a given period.");
+                                    this.localization.Get("Main.SaleSummaryTooltip"));
                                 this.SelectedTab = MainWindowTab.SalesSummary;
                                 this.DrawButtonBar();
                                 this.DrawSalesSummary();
@@ -810,7 +813,7 @@ public class MainWindow : ExtendedWindow
                 {
                     ImGui.PushTextWrapPos();
                     ImGui.Text(
-                        "It looks like you opened your retainer before this plugin loaded. Please go back to the retainer list and reopen the retainer. The only time this happens is when the plugin is updated or you have just installed the plugin.");
+                        this.localization.Get("Main.RetainerOpenedBeforePlugin"));
                     ImGui.PopTextWrapPos();
                 }
 
@@ -818,13 +821,13 @@ public class MainWindow : ExtendedWindow
                 {
                     ImGui.AlignTextToFramePadding();
                     ImGui.Text(
-                        $"{this.saleFilter.GetSaleItems().Count} items for sale on {this.GetSelectedName()} worth {this.saleFilter.AggregateSalesTotalGil.ToString("C", this.gilNumberFormat)}");
+                        this.localization.Format("Main.SalesStatus", this.saleFilter.GetSaleItems().Count, this.GetSelectedName(), this.saleFilter.AggregateSalesTotalGil.ToString("C", this.gilNumberFormat)));
                 }
                 else if (this.SelectedTab == MainWindowTab.SalesHistory)
                 {
                     ImGui.AlignTextToFramePadding();
                     ImGui.Text(
-                        $"{this.saleFilter.GetSoldItems().Count} items sold on {this.GetSelectedName()} worth {this.saleFilter.AggregateSoldTotalGil.ToString("C", this.gilNumberFormat)}");
+                        this.localization.Format("Main.SoldStatus", this.saleFilter.GetSoldItems().Count, this.GetSelectedName(), this.saleFilter.AggregateSoldTotalGil.ToString("C", this.gilNumberFormat)));
                 }
 
                 var selectedGil = this.GetSelectedGil();
@@ -832,7 +835,7 @@ public class MainWindow : ExtendedWindow
                 {
                     ImGui.SameLine();
                     ImGui.Text(
-                        $"{this.GetSelectedName()} has {selectedGil.Value.ToString("C", this.gilNumberFormat)} stored.");
+                        this.localization.Format("Main.GilStored", this.GetSelectedName(), selectedGil.Value.ToString("C", this.gilNumberFormat)));
                 }
             }
         }
@@ -933,7 +936,7 @@ public class MainWindow : ExtendedWindow
             var total = 0;
             if (retainerItems.Count == 0)
             {
-                ImGui.Text("No sales tracked yet, please visit a retainer to perform an initial scan on their sales.");
+                ImGui.Text(this.localization.Get("Main.NoSalesTracked"));
             }
 
             for (var index = 0; index < retainerItems.Count; index++)
@@ -983,8 +986,8 @@ public class MainWindow : ExtendedWindow
                         ImGui.Text(item.Name.ExtractText());
                         ImGui.PushTextWrapPos();
                         ImGui.Text(
-                            $"{saleItem.Quantity} at {saleItem.UnitPrice.ToString("C", this.gilNumberFormat)} ({saleItem.TotalIncTax.ToString("C", this.gilNumberFormat)})");
-                        ImGui.Text($"Sold on {saleItem.SoldAt.ToString(CultureInfo.CurrentCulture)}");
+                                this.localization.Format("Main.QuantityAt", saleItem.Quantity, saleItem.UnitPrice.ToString("C", this.gilNumberFormat), saleItem.TotalIncTax.ToString("C", this.gilNumberFormat)));
+                            ImGui.Text(this.localization.Format("Main.SoldOn", saleItem.SoldAt.ToString(CultureInfo.CurrentCulture)));
                         ImGui.PopTextWrapPos();
                     }
                 }
@@ -1032,7 +1035,7 @@ public class MainWindow : ExtendedWindow
                     // Empty slot
                     if (saleItem.ItemId == 0)
                     {
-                        ImGui.Text("Empty Slot");
+                        ImGui.Text(this.localization.Get("Main.EmptySlot"));
                         return;
                     }
 
@@ -1040,7 +1043,7 @@ public class MainWindow : ExtendedWindow
                     var character = this.CharacterMonitorService.GetCharacterById(saleItem.RetainerId);
                     if (character == null)
                     {
-                        ImGui.Text("Unknown Character");
+                        ImGui.Text(this.localization.Get("Main.UnknownCharacter"));
                         return;
                     }
 
@@ -1089,15 +1092,15 @@ public class MainWindow : ExtendedWindow
                                     new Vector2(16, 16));
                                 undercutHovered = ImGui.IsItemHovered();
                                 ImGuiService.HoverTooltip(
-                                    $"You have been undercut on this item by {SeIconChar.Gil.ToIconString()} {undercutBy}");
+                                    this.localization.Format("Main.UndercutBy", $"{SeIconChar.Gil.ToIconString()} {undercutBy}"));
                                 ImGui.SetCursorPos(startPosition);
                             }
 
                             ImGui.Text(item.Name.ExtractText());
                             ImGui.PushTextWrapPos();
                             ImGui.Text(
-                                $"{saleItem.Quantity} at {saleItem.UnitPrice.ToString("C", this.gilNumberFormat)} ({saleItem.Total.ToString("C", this.gilNumberFormat)})");
-                            ImGui.Text($"Listed: {listedAtHumanized}");
+                                this.localization.Format("Main.QuantityAt", saleItem.Quantity, saleItem.UnitPrice.ToString("C", this.gilNumberFormat), saleItem.Total.ToString("C", this.gilNumberFormat)));
+                            ImGui.Text(this.localization.Format("Main.Listed", listedAtHumanized));
 
                             using (ImRaii.PushColor(
                                        ImGuiCol.Text,
@@ -1106,7 +1109,7 @@ public class MainWindow : ExtendedWindow
                                            saleItem,
                                            this.itemUpdatePeriodSetting.CurrentValue(this.Configuration))))
                             {
-                                ImGui.Text($"Updated: {lastUpdatedHumanized}");
+                                ImGui.Text(this.localization.Format("Main.Updated", lastUpdatedHumanized));
                             }
 
                             ImGui.PopTextWrapPos();
@@ -1118,27 +1121,27 @@ public class MainWindow : ExtendedWindow
                         using (ImRaii.Tooltip())
                         {
                             ImGui.Text($"{item.Name.ExtractText()}");
-                            ImGui.Text($"{character?.Name ?? "Unknown"}");
+                            ImGui.Text(character?.Name ?? this.localization.Get("Main.Unknown"));
                             ImGui.Text($"{retainerWorld.Name.ExtractText()}");
                             ImGui.Text(
-                                $"{saleItem.Quantity} at {saleItem.UnitPrice.ToString("C", this.gilNumberFormat)} ({saleItem.Total.ToString("C", this.gilNumberFormat)})");
-                            ImGui.Text($"Listed: {listedAtHumanized}");
-                            ImGui.Text($"Updated: {lastUpdatedHumanized}");
+                                this.localization.Format("Main.QuantityAt", saleItem.Quantity, saleItem.UnitPrice.ToString("C", this.gilNumberFormat), saleItem.Total.ToString("C", this.gilNumberFormat)));
+                            ImGui.Text(this.localization.Format("Main.Listed", listedAtHumanized));
+                            ImGui.Text(this.localization.Format("Main.Updated", lastUpdatedHumanized));
                             var marketPriceNq = this.undercutService.GetMarketPriceCache(retainerWorld.RowId, saleItem.ItemId, false);
                             var marketPriceHq = this.undercutService.GetMarketPriceCache(retainerWorld.RowId, saleItem.ItemId, true);
                             if (marketPriceNq != null || marketPriceHq != null)
                             {
                                 ImGui.Separator();
-                                ImGui.Text("Latest Data:");
-                                ImGui.Text($"Source: {marketPriceNq?.GetFormattedType() ?? marketPriceHq?.GetFormattedType()}");
+                                ImGui.Text(this.localization.Get("Main.LatestData"));
+                                ImGui.Text(this.localization.Format("Main.Source", marketPriceNq?.GetFormattedType() ?? marketPriceHq?.GetFormattedType()));
                                 if (marketPriceNq != null)
                                 {
-                                    ImGui.Text($"Unit Price NQ: {marketPriceNq?.UnitCost}");
+                                    ImGui.Text(this.localization.Format("Main.UnitPriceNq", marketPriceNq?.UnitCost));
                                 }
 
                                 if (marketPriceHq != null)
                                 {
-                                    ImGui.Text($"Unit Price HQ: {marketPriceHq?.UnitCost}");
+                                    ImGui.Text(this.localization.Format("Main.UnitPriceHq", marketPriceHq?.UnitCost));
                                 }
                             }
                         }
@@ -1187,9 +1190,9 @@ public class MainWindow : ExtendedWindow
                     break;
             }
 
-            var searchWidth = ImGui.CalcTextSize("Search").X + ImGui.GetStyle().ItemSpacing.X;
+            var searchWidth = ImGui.CalcTextSize(this.localization.Get("Main.Search")).X + ImGui.GetStyle().ItemSpacing.X;
             ImGui.SetNextItemWidth(searchWidth);
-            ImGui.LabelText(string.Empty, "Search:");
+            ImGui.LabelText(string.Empty, this.localization.Get("Main.SearchLabel"));
             ImGui.SameLine();
             ImGui.SetNextItemWidth(150);
             if (ImGui.InputText("##searchBox", ref search, 200))
@@ -1215,7 +1218,7 @@ public class MainWindow : ExtendedWindow
                     this.font,
                     FontAwesomeIcon.Times,
                     ref cursorPosX,
-                    "Clear search"))
+                    this.localization.Get("Main.ClearSearch")))
             {
                 this.saleFilter.Clear();
             }
@@ -1224,7 +1227,7 @@ public class MainWindow : ExtendedWindow
             {
                 ImGui.SameLine();
                 var showEmptySlots = this.saleFilter.ShowEmpty ?? false;
-                if (ImGui.Checkbox("Show empty slots:", ref showEmptySlots))
+                if (ImGui.Checkbox(this.localization.Get("Main.ShowEmptySlots"), ref showEmptySlots))
                 {
                     this.saleFilter.ShowEmpty = showEmptySlots;
                 }
@@ -1274,12 +1277,12 @@ public class MainWindow : ExtendedWindow
                 {
                     if (popup)
                     {
-                        if (ImGui.Selectable("Date Range", this.summaryDateMode == SummaryDateMode.Range))
+                        if (ImGui.Selectable(this.localization.Get("Main.DateRange"), this.summaryDateMode == SummaryDateMode.Range))
                         {
                             this.summaryDateMode = SummaryDateMode.Range;
                         }
 
-                        if (ImGui.Selectable("Since Today", this.summaryDateMode == SummaryDateMode.TimeSpan))
+                        if (ImGui.Selectable(this.localization.Get("Main.SinceToday"), this.summaryDateMode == SummaryDateMode.TimeSpan))
                         {
                             this.summaryDateMode = SummaryDateMode.TimeSpan;
                         }
@@ -1294,7 +1297,7 @@ public class MainWindow : ExtendedWindow
                     this.font,
                     FontAwesomeIcon.Search,
                     ref cursorPosX,
-                    "Toggle search bar",
+                    this.localization.Get("Main.ToggleSearchBar"),
                     true))
             {
                 this.filterMenuOpen = !this.filterMenuOpen;
@@ -1333,22 +1336,22 @@ public class MainWindow : ExtendedWindow
     {
         if (this.saleFilter.CharacterId == null && this.saleFilter.WorldId == null)
         {
-            return "All Retainers/Worlds";
+            return this.localization.Get("Main.AllRetainersWorlds");
         }
 
         if (this.saleFilter.CharacterId != null)
         {
             return this.CharacterMonitorService.GetCharacterById(this.saleFilter.CharacterId.Value)?.Name ??
-                   "Unknown Character/Retainer";
+                   this.localization.Get("Main.UnknownCharacterRetainer");
         }
 
         if (this.saleFilter.WorldId != null)
         {
             return this.worldSheet.GetRowOrDefault((uint)this.saleFilter.WorldId)?.Name.ExtractText() ??
-                   "Unknown World";
+                   this.localization.Get("Main.UnknownWorld");
         }
 
-        return "Unknown";
+        return this.localization.Get("Main.Unknown");
     }
 
     private uint? GetSelectedGil()

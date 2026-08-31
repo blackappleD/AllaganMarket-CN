@@ -4,6 +4,7 @@ using System.Numerics;
 using AllaganLib.Interface.Widgets;
 
 using AllaganMarket.Services;
+using AllaganMarket.Widgets;
 
 using DalaMock.Host.Mediator;
 
@@ -14,13 +15,14 @@ namespace AllaganMarket.Windows;
 
 public class WizardWindow : ExtendedWindow, IDisposable
 {
-    private readonly WizardWidget<Configuration> wizardWidget;
+    private readonly LocalizedWizardWidget<Configuration> wizardWidget;
 
     public WizardWindow(
-        WizardWidget<Configuration> wizardWidget,
+        LocalizedWizardWidget<Configuration> wizardWidget,
         MediatorService mediatorService,
-        ImGuiService imGuiService)
-        : base(mediatorService, imGuiService, "Allagan Market - Wizard")
+        ImGuiService imGuiService,
+        LocalizationService localization)
+        : base(mediatorService, imGuiService, localization.Get("Window.Wizard.Title") + "##WizardWindow")
     {
         this.wizardWidget = wizardWidget;
         this.wizardWidget.OnClosed += this.WizardWidgetOnOnClosed;

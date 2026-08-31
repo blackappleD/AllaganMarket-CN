@@ -13,14 +13,18 @@ using ImGuiService = AllaganLib.Interface.Services.ImGuiService;
 
 namespace AllaganMarket.Tables.Columns;
 
-public class UndercutByColumn(NumberFormatInfo gilFormat, ImGuiService imGuiService, StringColumnFilter stringColumnFilter, UndercutService undercutService)
+public class UndercutByColumn(NumberFormatInfo gilFormat, ImGuiService imGuiService, StringColumnFilter stringColumnFilter, UndercutService undercutService, LocalizationService localization)
     : GilColumn(gilFormat, imGuiService, stringColumnFilter)
 {
     public override string DefaultValue { get; set; } = string.Empty;
 
     public override string Key { get; set; } = "UndercutBy";
 
-    public override string Name { get; set; } = "Undercut by";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.UndercutBy", "Undercut by");
+        set { }
+    }
 
     public override string? RenderName { get; set; } = null;
 

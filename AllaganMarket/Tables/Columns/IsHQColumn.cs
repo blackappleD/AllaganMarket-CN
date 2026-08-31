@@ -1,20 +1,26 @@
 using AllaganLib.Interface.Grid;
 using AllaganLib.Interface.Services;
 
+using LocalizationService = AllaganMarket.Services.LocalizationService;
+
 using DalaMock.Host.Mediator;
 
 using Dalamud.Bindings.ImGui;
 
 namespace AllaganMarket.Tables.Columns;
 
-public class IsHQColumn(ImGuiService imGuiService)
+public class IsHQColumn(ImGuiService imGuiService, LocalizationService localization)
     : BooleanColumn<SearchResultConfiguration, SearchResult, MessageBase>(imGuiService)
 {
     public override string DefaultValue { get; set; } = string.Empty;
 
     public override string Key { get; set; } = "IsHQ";
 
-    public override string Name { get; set; } = "Is HQ?";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.IsHQ", "Is HQ?");
+        set { }
+    }
 
     public override string? RenderName { get; set; } = null;
 

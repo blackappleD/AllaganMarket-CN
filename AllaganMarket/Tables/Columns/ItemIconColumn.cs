@@ -4,6 +4,7 @@ using AllaganLib.Interface.Grid;
 using AllaganLib.Interface.Services;
 
 using AllaganMarket.Extensions;
+using LocalizationService = AllaganMarket.Services.LocalizationService;
 
 using DalaMock.Host.Mediator;
 
@@ -19,17 +20,23 @@ namespace AllaganMarket.Tables.Columns;
 public class ItemIconColumn : IconColumn<SearchResultConfiguration, SearchResult, MessageBase>
 {
     private readonly ExcelSheet<Item> itemSheet;
+    private readonly LocalizationService localization;
 
-    public ItemIconColumn(ExcelSheet<Item> itemSheet, ITextureProvider textureProvider, ImGuiService imGuiService) : base(textureProvider, imGuiService)
+    public ItemIconColumn(ExcelSheet<Item> itemSheet, ITextureProvider textureProvider, ImGuiService imGuiService, LocalizationService localization) : base(textureProvider, imGuiService)
     {
         this.itemSheet = itemSheet;
+        this.localization = localization;
     }
 
     public override int DefaultValue { get; set; } = 0;
 
     public override string Key { get; set; } = "Icon";
 
-    public override string Name { get; set; } = "Icon";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.Icon", "Icon");
+        set { }
+    }
 
     public override string? RenderName { get; set; } = null;
 

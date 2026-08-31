@@ -5,6 +5,8 @@ using System.Linq;
 using AllaganLib.Interface.FormFields;
 using AllaganLib.Interface.Services;
 
+using LocalizationService = AllaganMarket.Services.LocalizationService;
+
 using Dalamud.Game.Text;
 
 namespace AllaganMarket.Settings.Abstract;
@@ -13,10 +15,12 @@ public abstract class XivChatTypeFormField : EnumFormField<XivChatType, Configur
 {
     private readonly Dictionary<Enum, string> choices;
 
-    protected XivChatTypeFormField(ImGuiService imGuiService)
+    protected XivChatTypeFormField(ImGuiService imGuiService, LocalizationService localization)
         : base(imGuiService)
     {
-        this.choices = Enum.GetValues<XivChatType>().ToDictionary(c => (Enum)c, c => XivChatTypeExtensions.GetDetails(c)?.FancyName ?? c.ToString());
+        this.choices = Enum.GetValues<XivChatType>().ToDictionary(
+            c => (Enum)c,
+            c => localization.GetChatTypeName(c, XivChatTypeExtensions.GetDetails(c)?.FancyName ?? c.ToString()));
     }
 
     public override bool Equal(Enum item1, Enum item2)

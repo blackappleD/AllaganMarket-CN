@@ -4,17 +4,17 @@ using AllaganLib.Interface.FormFields;
 using AllaganLib.Interface.Wizard;
 
 using AllaganMarket.Settings;
+using AllaganMarket.Services;
 
 namespace AllaganMarket.Features;
 
-public class OverlaysFeature(IEnumerable<IFormField<Configuration>> settings) : Feature<Configuration>(
+public class OverlaysFeature(IEnumerable<IFormField<Configuration>> settings, LocalizationService localization) : Feature<Configuration>(
     [
         typeof(ShowRetainerOverlaySetting)
     ],
     settings)
 {
-    public override string Name { get; } = "Overlays";
+    public override string Name => localization.Get("Wizard.Feature.Overlays.Name");
 
-    public override string Description { get; } =
-        "Activate overlays that will appear when certain parts of the game UI are present.";
+    public override string Description => localization.Get("Wizard.Feature.Overlays.Description");
 }

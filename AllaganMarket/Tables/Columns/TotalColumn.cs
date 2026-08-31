@@ -6,20 +6,26 @@ using AllaganLib.Interface.Services;
 
 using DalaMock.Host.Mediator;
 
+using LocalizationService = AllaganMarket.Services.LocalizationService;
+
 using Dalamud.Game.Text;
 
 using Dalamud.Bindings.ImGui;
 
 namespace AllaganMarket.Tables.Columns;
 
-public class TotalColumn(NumberFormatInfo gilFormat, ImGuiService imGuiService, StringColumnFilter stringColumnFilter)
+public class TotalColumn(NumberFormatInfo gilFormat, ImGuiService imGuiService, StringColumnFilter stringColumnFilter, LocalizationService localization)
     : GilColumn(gilFormat, imGuiService, stringColumnFilter)
 {
     public override string DefaultValue { get; set; } = string.Empty;
 
     public override string Key { get; set; } = "Total";
 
-    public override string Name { get; set; } = "Total " + SeIconChar.Gil.ToIconString();
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.Total", "Total ") + SeIconChar.Gil.ToIconString();
+        set { }
+    }
 
     public override string? RenderName { get; set; } = null;
 

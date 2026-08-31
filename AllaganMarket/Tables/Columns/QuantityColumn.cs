@@ -2,20 +2,26 @@ using AllaganLib.Interface.Grid;
 using AllaganLib.Interface.Grid.ColumnFilters;
 using AllaganLib.Interface.Services;
 
+using LocalizationService = AllaganMarket.Services.LocalizationService;
+
 using DalaMock.Host.Mediator;
 
 using Dalamud.Bindings.ImGui;
 
 namespace AllaganMarket.Tables.Columns;
 
-public class QuantityColumn(ImGuiService imGuiService, StringColumnFilter stringColumnFilter)
+public class QuantityColumn(ImGuiService imGuiService, StringColumnFilter stringColumnFilter, LocalizationService localization)
     : IntegerColumn<SearchResultConfiguration, SearchResult, MessageBase>(imGuiService, stringColumnFilter)
 {
     public override string DefaultValue { get; set; } = string.Empty;
 
     public override string Key { get; set; } = "quantity";
 
-    public override string Name { get; set; } = "Quantity";
+    public override string Name
+    {
+        get => localization.GetOrDefault("Column.Quantity", "Quantity");
+        set { }
+    }
 
     public override string? RenderName { get; set; }
 
