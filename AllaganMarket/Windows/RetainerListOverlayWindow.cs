@@ -33,6 +33,7 @@ public class RetainerListOverlayWindow : OverlayWindow
     private readonly RetainerOverlayCollapsedSetting overlayCollapsedSetting;
     private readonly ShowRetainerOverlaySetting retainerOverlaySetting;
     private readonly UndercutService undercutService;
+    private readonly AutoUndercutService autoUndercutService;
     private readonly HighlightingRetainerListSetting retainerListSetting;
     private readonly LocalizationService localization;
     private bool showAllRetainers;
@@ -52,6 +53,7 @@ public class RetainerListOverlayWindow : OverlayWindow
         RetainerOverlayCollapsedSetting overlayCollapsedSetting,
         ShowRetainerOverlaySetting retainerOverlaySetting,
         UndercutService undercutService,
+        AutoUndercutService autoUndercutService,
         HighlightingRetainerListSetting retainerListSetting,
         LocalizationService localization)
         : base(addonLifecycle, gameGui, logger, mediator, imGuiService, "Retainer List Overlay")
@@ -65,6 +67,7 @@ public class RetainerListOverlayWindow : OverlayWindow
         this.overlayCollapsedSetting = overlayCollapsedSetting;
         this.retainerOverlaySetting = retainerOverlaySetting;
         this.undercutService = undercutService;
+        this.autoUndercutService = autoUndercutService;
         this.retainerListSetting = retainerListSetting;
         this.localization = localization;
         this.AttachAddon("RetainerList", AttachPosition.Right);
@@ -103,7 +106,7 @@ public class RetainerListOverlayWindow : OverlayWindow
 
         this.SizeConstraints = new WindowSizeConstraints()
         {
-            MaximumSize = new Vector2(360, 800) * ImGui.GetIO().FontGlobalScale,
+            MaximumSize = new Vector2(520, 800) * ImGui.GetIO().FontGlobalScale,
         };
 
         if (collapsed && ImGuiService.DrawIconButton(this.font, FontAwesomeIcon.ChevronRight, ref currentCursorPosX))
@@ -153,6 +156,21 @@ public class RetainerListOverlayWindow : OverlayWindow
 
         ImGui.SameLine();
 
+        using (ImRaii.Disabled(this.autoUndercutService.IsRunning))
+        {
+            if (ImGuiService.DrawIconButton(
+                    this.font,
+                    FontAwesomeIcon.Play,
+                    ref currentCursorPosX,
+                    this.localization.Get("Overlay.StartAutoUndercut"),
+                    true))
+            {
+                this.autoUndercutService.Start();
+            }
+        }
+
+        ImGui.SameLine();
+
         if (ImGuiService.DrawIconButton(
                 this.font,
                 FontAwesomeIcon.Eye,
@@ -188,12 +206,13 @@ public class RetainerListOverlayWindow : OverlayWindow
             var interval = this.updatePeriodSetting.CurrentValue(this.configuration);
             var retainersToCheck = false;
 
-            using (ImRaii.Table("RetainerList", 4, ImGuiTableFlags.SizingFixedFit))
+            using (ImRaii.Table("RetainerList", 5, ImGuiTableFlags.SizingFixedFit))
             {
                 ImGui.TableSetupColumn(this.localization.Get("Overlay.Name"), ImGuiTableColumnFlags.WidthFixed, 100 * ImGui.GetIO().FontGlobalScale);
                 ImGui.TableSetupColumn(this.localization.Get("Overlay.Selling"), ImGuiTableColumnFlags.WidthFixed, 50 * ImGui.GetIO().FontGlobalScale);
                 ImGui.TableSetupColumn(this.localization.Get("Overlay.Undercut"), ImGuiTableColumnFlags.WidthFixed, 70 * ImGui.GetIO().FontGlobalScale);
                 ImGui.TableSetupColumn(this.localization.Get("Overlay.LastUpdate"), ImGuiTableColumnFlags.WidthFixed, 130 * ImGui.GetIO().FontGlobalScale);
+                ImGui.TableSetupColumn(this.localization.Get("Overlay.AutoUndercut"), ImGuiTableColumnFlags.WidthFixed, 90 * ImGui.GetIO().FontGlobalScale);
                 ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
                 ImGui.TableNextColumn();
                 ImGui.Text(this.localization.Get("Overlay.Name"));
@@ -203,6 +222,8 @@ public class RetainerListOverlayWindow : OverlayWindow
                 ImGui.Text(this.localization.Get("Overlay.Undercut"));
                 ImGui.TableNextColumn();
                 ImGui.Text(this.localization.Get("Overlay.StalePricing"));
+                ImGui.TableNextColumn();
+                ImGui.Text(this.localization.Get("Overlay.AutoUndercut"));
                 foreach (var retainer in retainers)
                 {
                     var isUnderCut = false;
@@ -252,6 +273,15 @@ public class RetainerListOverlayWindow : OverlayWindow
                     }
 
                     ImGui.Text(needsUpdateText);
+
+                    ImGui.TableNextColumn();
+                    var autoUndercut = retainer.AutoUndercut;
+                    if (ImGui.Checkbox($"##auto-undercut-{retainer.CharacterId}", ref autoUndercut) &&
+                        autoUndercut != retainer.AutoUndercut)
+                    {
+                        retainer.AutoUndercut = autoUndercut;
+                        this.configuration.IsDirty = true;
+                    }
                 }
             }
 

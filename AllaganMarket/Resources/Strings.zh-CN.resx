@@ -258,4 +258,6 @@
   <data name="Overlay.Selling" xml:space="preserve"><value>在售</value></data>
   <data name="Overlay.LastUpdate" xml:space="preserve"><value>上次更新</value></data>
   <data name="Overlay.NoRetainersLeft" xml:space="preserve"><value>没有需要更新的雇员。</value></data>
+  <data name="Overlay.AutoUndercut" xml:space="preserve"><value>自动压价</value></data>
+  <data name="Overlay.StartAutoUndercut" xml:space="preserve"><value>对选中的雇员执行自动压价。</value></data>
 </root>

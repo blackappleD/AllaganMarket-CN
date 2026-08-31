@@ -177,6 +177,7 @@ public class CharacterMonitorService(
                             index);
                         newRetainer.RetainerTown = retainer->Town;
                         newRetainer.OwnerId = playerState.ContentId;
+                        newRetainer.AutoUndercut = this.Characters.GetValueOrDefault(retainerId)?.AutoUndercut ?? false;
                         this.Characters[retainerId] = newRetainer;
                     }
                 }

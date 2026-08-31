@@ -1,0 +1,551 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+using AllaganMarket.Models;
+using AllaganMarket.Services.Interfaces;
+
+using Dalamud.Game.Addon.Lifecycle;
+using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
+using Dalamud.Plugin.Services;
+
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
+
+using Microsoft.Extensions.Hosting;
+
+namespace AllaganMarket.Services;
+
+/// <summary>
+/// Runs the retainer repricing flow through addon callbacks. No OS mouse or keyboard input is generated.
+/// </summary>
+public sealed class AutoUndercutService : IHostedService, IDisposable
+{
+    private readonly IFramework framework;
+    private readonly IGameGui gameGui;
+    private readonly IAddonLifecycle addonLifecycle;
+    private readonly IPluginLog pluginLog;
+    private readonly ICharacterMonitorService characterMonitorService;
+    private readonly SaleTrackerService saleTrackerService;
+    private readonly UndercutService undercutService;
+
+    private CancellationTokenSource? cancellationTokenSource;
+
+    public AutoUndercutService(
+        IFramework framework,
+        IGameGui gameGui,
+        IAddonLifecycle addonLifecycle,
+        IPluginLog pluginLog,
+        ICharacterMonitorService characterMonitorService,
+        SaleTrackerService saleTrackerService,
+        UndercutService undercutService)
+    {
+        this.framework = framework;
+        this.gameGui = gameGui;
+        this.addonLifecycle = addonLifecycle;
+        this.pluginLog = pluginLog;
+        this.characterMonitorService = characterMonitorService;
+        this.saleTrackerService = saleTrackerService;
+        this.undercutService = undercutService;
+    }
+
+    public bool IsRunning { get; private set; }
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        // Talk can be created and refreshed several times while the retainer's
+        // greeting/dialogue is being displayed.  Advancing it from both events
+        // mirrors TextAdvance and keeps the automation from getting stuck on a
+        // transient Talk addon.
+        this.addonLifecycle.RegisterListener(AddonEvent.PostSetup, "Talk", this.OnTalkUpdated);
+        this.addonLifecycle.RegisterListener(AddonEvent.PostUpdate, "Talk", this.OnTalkUpdated);
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        this.cancellationTokenSource?.Cancel();
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, "Talk", this.OnTalkUpdated);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostUpdate, "Talk", this.OnTalkUpdated);
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        this.cancellationTokenSource?.Cancel();
+        this.cancellationTokenSource?.Dispose();
+    }
+
+    public void Start()
+    {
+        if (this.IsRunning || !this.characterMonitorService.IsLoggedIn)
+        {
+            return;
+        }
+
+        var activeCharacter = this.characterMonitorService.ActiveCharacter;
+        if (activeCharacter == null)
+        {
+            return;
+        }
+
+        var retainers = this.characterMonitorService.GetRetainers(activeCharacter.CharacterId)
+            .Where(retainer => retainer.AutoUndercut)
+            .OrderBy(retainer => retainer.DisplayOrder)
+            .ToList();
+        if (retainers.Count == 0)
+        {
+            return;
+        }
+
+        this.cancellationTokenSource?.Cancel();
+        this.cancellationTokenSource?.Dispose();
+        this.cancellationTokenSource = new CancellationTokenSource();
+        this.IsRunning = true;
+        _ = this.RunAsync(retainers, this.cancellationTokenSource.Token);
+    }
+
+    public void Cancel()
+    {
+        this.cancellationTokenSource?.Cancel();
+    }
+
+    private async Task RunAsync(IReadOnlyList<Character> retainers, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!await this.WaitForAddon("RetainerList", cancellationToken))
+            {
+                return;
+            }
+
+            foreach (var retainer in retainers)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                this.pluginLog.Information($"Automatic undercut: opening retainer {retainer.Name}.");
+
+                if (!await this.SelectRetainer(retainer.DisplayOrder, cancellationToken) ||
+                    !await this.WaitForSelectString(cancellationToken) ||
+                    !await this.SelectSellInventory(cancellationToken) ||
+                    !await this.WaitForAddon("RetainerSellList", cancellationToken))
+                {
+                    this.pluginLog.Error($"Automatic undercut: unable to open retainer {retainer.Name}.");
+                    await this.CloseRetainerWindows(cancellationToken);
+                    continue;
+                }
+
+                await Task.Delay(400, cancellationToken);
+                await this.ProcessRetainer(retainer, cancellationToken);
+                await this.CloseRetainerWindows(cancellationToken);
+                await Task.Delay(400, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            this.pluginLog.Information("Automatic undercut cancelled.");
+        }
+        catch (Exception ex)
+        {
+            this.pluginLog.Error($"Automatic undercut failed: {ex}");
+        }
+        finally
+        {
+            this.IsRunning = false;
+        }
+    }
+
+    private async Task ProcessRetainer(Character retainer, CancellationToken cancellationToken)
+    {
+        List<SaleItem>? saleItems = null;
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            saleItems = this.saleTrackerService.GetRetainerSales(retainer.CharacterId)?
+                .Where(item => !item.IsEmpty())
+                .OrderBy(item => item.MenuIndex)
+                .ToList();
+            if (saleItems is { Count: > 0 })
+            {
+                break;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        if (saleItems == null || saleItems.Count == 0)
+        {
+            this.pluginLog.Information($"Automatic undercut: retainer {retainer.Name} has no listed items.");
+            return;
+        }
+
+        for (var rowIndex = 0; rowIndex < saleItems.Count; rowIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var saleItem = saleItems[rowIndex];
+            if (!await this.SelectListedItem(rowIndex, cancellationToken) ||
+                !await this.WaitForAddon("ContextMenu", cancellationToken) ||
+                !await this.SelectContextMenuItem(cancellationToken) ||
+                !await this.WaitForAddon("RetainerSell", cancellationToken))
+            {
+                this.pluginLog.Error($"Automatic undercut: unable to open listed item row {rowIndex}.");
+                continue;
+            }
+
+            // ComparePrices is the game's "view current market price" action.
+            await this.ClickRetainerSellCallback(4, cancellationToken);
+            await Task.Delay(650, cancellationToken);
+
+            // The market result is an auxiliary addon. Close it before confirming the price change.
+            await this.CloseAddon("ItemSearchResult", cancellationToken);
+
+            var recommendedPrice = await this.WaitForRecommendedPrice(saleItem, cancellationToken);
+            if (recommendedPrice is { } price && price < saleItem.UnitPrice)
+            {
+                await this.SetRetainerSellPrice(price, cancellationToken);
+                this.pluginLog.Information($"Automatic undercut: {saleItem.ItemId} {saleItem.UnitPrice} -> {price}.");
+            }
+
+            // Confirm even when no lower price exists, preserving the current listing price.
+            await this.ClickRetainerSellCallback(0, cancellationToken);
+            await this.WaitForAddon("RetainerSellList", cancellationToken);
+            await Task.Delay(250, cancellationToken);
+        }
+    }
+
+    private async Task<uint?> WaitForRecommendedPrice(SaleItem saleItem, CancellationToken cancellationToken)
+    {
+        uint? result = null;
+        for (var attempt = 0; attempt < 12; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result = this.undercutService.GetRecommendedUnitPrice(saleItem)?.Amount;
+            if (result != null)
+            {
+                break;
+            }
+
+            await Task.Delay(125, cancellationToken);
+        }
+
+        return result;
+    }
+
+    private Task<bool> SelectRetainer(byte displayOrder, CancellationToken cancellationToken)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName("RetainerList");
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AtkUnitBase*)pointer.Address;
+                if (!this.IsReady(addon))
+                {
+                    return false;
+                }
+
+                var values = stackalloc AtkValue[4];
+                values[0] = new AtkValue { Type = AtkValueType.Int, Int = 2 };
+                values[1] = new AtkValue { Type = AtkValueType.UInt, UInt = displayOrder };
+                values[2] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
+                values[3] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
+
+                // FireCallback's boolean result is not a reliable success indicator for this addon;
+                // the game often returns false even though the retainer selection was accepted.
+                addon->FireCallback(4, values, false);
+                return true;
+            }
+        });
+    }
+
+    private Task<bool> SelectSellInventory(CancellationToken cancellationToken)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName("SelectString");
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AddonSelectString*)pointer.Address;
+                if (!this.IsReady(&addon->AtkUnitBase) || addon->PopupMenu.List == null)
+                {
+                    return false;
+                }
+
+                var selectedIndex = -1;
+                for (var index = 0; index < addon->PopupMenu.List->ListLength; index++)
+                {
+                    try
+                    {
+                        var text = addon->PopupMenu.List->GetItemLabel(index).ToString();
+                        if (text.Contains("出售（玩家所持物品）", StringComparison.Ordinal) ||
+                            text.Contains("出售（玩家所持物品", StringComparison.Ordinal) ||
+                            text.Contains("Sell items in your inventory", StringComparison.OrdinalIgnoreCase) ||
+                            text.Contains("Sell (Items in your inventory", StringComparison.OrdinalIgnoreCase))
+                        {
+                            selectedIndex = index;
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        // UI text nodes can be invalid while SelectString is refreshing.
+                    }
+                }
+
+                // This is the current fallback row for the standard retainer menu.
+                selectedIndex = selectedIndex < 0 ? 2 : selectedIndex;
+                var value = new AtkValue { Type = AtkValueType.Int, Int = selectedIndex };
+                addon->AtkUnitBase.FireCallback(1, &value, false);
+                return true;
+            }
+        });
+    }
+
+    private async Task<bool> WaitForSelectString(CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await this.IsAddonReady("SelectString"))
+            {
+                return true;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        return false;
+    }
+
+    private Task<bool> IsAddonReady(string addonName)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName(addonName);
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                return this.IsReady((AtkUnitBase*)pointer.Address);
+            }
+        });
+    }
+
+    private unsafe void OnTalkUpdated(AddonEvent type, AddonArgs args)
+    {
+        if (!this.IsRunning)
+        {
+            return;
+        }
+
+        var addon = (AtkUnitBase*)args.Addon.Address;
+        if (this.IsReady(addon))
+        {
+            ClickTalk(addon);
+        }
+    }
+
+    /// <summary>
+    /// Sends the same internal event sequence used by TextAdvance's
+    /// AddonMaster.Talk.Click().  This never moves the user's OS cursor or
+    /// generates keyboard input.
+    /// </summary>
+    private static unsafe void ClickTalk(AtkUnitBase* addon)
+    {
+        var stage = AtkStage.Instance();
+        if (stage == null)
+        {
+            return;
+        }
+
+        var atkEvent = new AtkEvent
+        {
+            Listener = (AtkEventListener*)addon,
+            Target = &stage->AtkEventTarget,
+            State = new AtkEventState { StateFlags = (AtkEventStateFlags)132 },
+        };
+        var eventData = default(AtkEventData);
+        addon->ReceiveEvent((AtkEventType)3, 0, &atkEvent, &eventData);
+        addon->ReceiveEvent((AtkEventType)9, 0, &atkEvent, &eventData);
+        addon->ReceiveEvent((AtkEventType)4, 0, &atkEvent, &eventData);
+    }
+
+    private Task<bool> SelectListedItem(int rowIndex, CancellationToken cancellationToken)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName("RetainerSellList");
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AtkUnitBase*)pointer.Address;
+                if (!this.IsReady(addon))
+                {
+                    return false;
+                }
+
+                var values = stackalloc AtkValue[3];
+                values[0] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
+                values[1] = new AtkValue { Type = AtkValueType.Int, Int = rowIndex };
+                values[2] = new AtkValue { Type = AtkValueType.Int, Int = 1 };
+                addon->FireCallback(3, values, true);
+                return true;
+            }
+        });
+    }
+
+    private Task<bool> SelectContextMenuItem(CancellationToken cancellationToken)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName("ContextMenu");
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AtkUnitBase*)pointer.Address;
+                if (!this.IsReady(addon))
+                {
+                    return false;
+                }
+
+                // For a listed market item, the first context-menu entry is always "Adjust Price".
+                var values = stackalloc AtkValue[3];
+                values[0] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
+                values[1] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
+                values[2] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
+                addon->FireCallback(3, values, true);
+                return true;
+            }
+        });
+    }
+
+    private Task<bool> ClickRetainerSellCallback(int callbackIndex, CancellationToken cancellationToken)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName("RetainerSell");
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AddonRetainerSell*)pointer.Address;
+                if (!this.IsReady(&addon->AtkUnitBase))
+                {
+                    return false;
+                }
+
+                var value = new AtkValue { Type = AtkValueType.Int, Int = callbackIndex };
+                addon->AtkUnitBase.FireCallback(1, &value, true);
+                return true;
+            }
+        });
+    }
+
+    private Task<bool> SetRetainerSellPrice(uint price, CancellationToken cancellationToken)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName("RetainerSell");
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AddonRetainerSell*)pointer.Address;
+                if (!this.IsReady(&addon->AtkUnitBase) || addon->AskingPrice == null)
+                {
+                    return false;
+                }
+
+                addon->AskingPrice->SetValue((int)price);
+                return true;
+            }
+        });
+    }
+
+    private async Task<bool> WaitForAddon(string addonName, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await this.framework.RunOnFrameworkThread(() =>
+                {
+                    var pointer = this.gameGui.GetAddonByName(addonName);
+                    if (pointer == IntPtr.Zero)
+                    {
+                        return false;
+                    }
+
+                    unsafe
+                    {
+                        return this.IsReady((AtkUnitBase*)pointer.Address);
+                    }
+                }))
+            {
+                return true;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        return false;
+    }
+
+    private Task<bool> CloseAddon(string addonName, CancellationToken cancellationToken)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName(addonName);
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AtkUnitBase*)pointer.Address;
+                return this.IsReady(addon) && addon->Close(true);
+            }
+        });
+    }
+
+    private async Task CloseRetainerWindows(CancellationToken cancellationToken)
+    {
+        await this.CloseAddon("RetainerSell", cancellationToken);
+        await this.CloseAddon("ItemSearchResult", cancellationToken);
+        await this.CloseAddon("RetainerSellList", cancellationToken);
+        await Task.Delay(250, cancellationToken);
+        await this.CloseAddon("SelectString", cancellationToken);
+    }
+
+    private unsafe bool IsReady(AtkUnitBase* addon)
+    {
+        return addon != null && addon->IsReady && addon->IsVisible;
+    }
+}

@@ -84,6 +84,7 @@ public class AllaganMarketPlugin : HostedPlugin
         typeof(DtrService),
         typeof(HighlightingService),
         typeof(RetainerService),
+        typeof(AutoUndercutService),
     };
 
     public List<Type> GetHostedServices()

@@ -258,4 +258,6 @@
   <data name="Overlay.Selling" xml:space="preserve"><value>Selling</value></data>
   <data name="Overlay.LastUpdate" xml:space="preserve"><value>Last Update</value></data>
   <data name="Overlay.NoRetainersLeft" xml:space="preserve"><value>No retainers left to update.</value></data>
+  <data name="Overlay.AutoUndercut" xml:space="preserve"><value>Auto Undercut</value></data>
+  <data name="Overlay.StartAutoUndercut" xml:space="preserve"><value>Run automatic undercut for selected retainers.</value></data>
 </root>

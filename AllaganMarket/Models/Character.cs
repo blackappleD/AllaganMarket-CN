@@ -44,6 +44,9 @@ public class Character : IEquatable<Character>
 
     public byte DisplayOrder { get; set; }
 
+    /// <summary>Whether this retainer is included when the automatic undercut action runs.</summary>
+    public bool AutoUndercut { get; set; }
+
     public RetainerManager.RetainerTown? RetainerTown { get; set; }
 
     public bool Equals(Character? other)
@@ -61,7 +64,8 @@ public class Character : IEquatable<Character>
         return this.CharacterId == other.CharacterId && this.CharacterType == other.CharacterType &&
                this.OwnerId == other.OwnerId && this.Name == other.Name && this.WorldId == other.WorldId &&
                other.RetainerTown == this.RetainerTown &&
-               other.ClassJobId == this.ClassJobId && other.Level == this.Level;
+               other.ClassJobId == this.ClassJobId && other.Level == this.Level &&
+               other.AutoUndercut == this.AutoUndercut;
     }
 
     public override bool Equals(object? obj)
@@ -87,13 +91,15 @@ public class Character : IEquatable<Character>
     public override int GetHashCode()
     {
         return HashCode.Combine(
-            this.CharacterId,
-            (int)this.CharacterType,
-            this.OwnerId,
-            this.WorldId,
-            this.ClassJobId,
-            this.Level,
-            this.RetainerTown,
-            this.Name);
+            HashCode.Combine(
+                this.CharacterId,
+                (int)this.CharacterType,
+                this.OwnerId,
+                this.WorldId,
+                this.ClassJobId,
+                this.Level,
+                this.RetainerTown,
+                this.Name),
+            this.AutoUndercut);
     }
 }
