@@ -461,6 +461,31 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         });
     }
 
+    private Task<bool> IsAnyAddonReady(string addonName)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            for (var addonIndex = 1; addonIndex <= 10; addonIndex++)
+            {
+                var pointer = this.gameGui.GetAddonByName(addonName, addonIndex);
+                if (pointer == IntPtr.Zero)
+                {
+                    continue;
+                }
+
+                unsafe
+                {
+                    if (this.IsReady((AtkUnitBase*)pointer.Address))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        });
+    }
+
     private unsafe void OnTalkUpdated(AddonEvent type, AddonArgs args)
     {
         if (!this.IsRunning)
@@ -652,6 +677,20 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         });
     }
 
+    private async Task CloseAllAddons(string addonName, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var closed = await this.CloseAddon(addonName, cancellationToken);
+            if (!closed && !await this.IsAnyAddonReady(addonName))
+            {
+                return;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+    }
+
     private async Task CloseRetainerWindows(CancellationToken cancellationToken)
     {
         await this.CloseAddon("RetainerSell", cancellationToken);
@@ -663,14 +702,25 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         // menu must receive the internal "return retainer" callback first;
         // otherwise the game remains in the current retainer's menu and the
         // next RetainerList selection can target the wrong state.
-        for (var attempt = 0; attempt < 10; attempt++)
+        var returnedRetainerMenu = false;
+        for (var attempt = 0; attempt < 20; attempt++)
         {
             if (await this.ReturnRetainer(cancellationToken))
             {
-                if (await this.WaitForAddon("RetainerList", cancellationToken))
-                {
-                    return;
-                }
+                returnedRetainerMenu = true;
+                await Task.Delay(150, cancellationToken);
+                continue;
+            }
+
+            // Once every SelectString instance is gone, the game should have
+            // returned to RetainerList.  Check this only after attempting to
+            // drain all menus, since multiple stale SelectString instances
+            // can otherwise leave one visible behind the current menu.
+            if (returnedRetainerMenu &&
+                !await this.IsAnyAddonReady("SelectString") &&
+                await this.WaitForAddon("RetainerList", cancellationToken))
+            {
+                return;
             }
 
             await Task.Delay(100, cancellationToken);
@@ -679,62 +729,72 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         // Fallback for an already-closed/refreshing menu or an unexpected UI
         // state.  This keeps cancellation and recovery paths from leaving a
         // stale SelectString addon visible.
-        await this.CloseAddon("SelectString", cancellationToken);
+        await this.CloseAllAddons("SelectString", cancellationToken);
     }
 
     private Task<bool> ReturnRetainer(CancellationToken cancellationToken)
     {
         return this.framework.RunOnFrameworkThread(() =>
         {
-            var pointer = this.gameGui.GetAddonByName("SelectString");
-            if (pointer == IntPtr.Zero)
+            // GetAddonByName without an index only returns the first instance.
+            // If a previous callback left a SelectString alive, the game can
+            // have several visible menus at once.  Drain one matching menu at
+            // a time and re-query on the next iteration so no stale pointer is
+            // retained after FireCallback changes the UI.
+            for (var addonIndex = 1; addonIndex <= 10; addonIndex++)
             {
-                return false;
-            }
-
-            unsafe
-            {
-                var addon = (AddonSelectString*)pointer.Address;
-                if (!this.IsReady(&addon->AtkUnitBase) || addon->PopupMenu.List == null)
+                var pointer = this.gameGui.GetAddonByName("SelectString", addonIndex);
+                if (pointer == IntPtr.Zero)
                 {
-                    return false;
+                    continue;
                 }
 
-                var selectedIndex = -1;
-                for (var index = 0; index < addon->PopupMenu.List->ListLength; index++)
+                unsafe
                 {
-                    try
+                    var addon = (AddonSelectString*)pointer.Address;
+                    if (!this.IsReady(&addon->AtkUnitBase) || addon->PopupMenu.List == null)
                     {
-                        var text = addon->PopupMenu.List->GetItemLabel(index).ToString();
-                        if (text.Contains("让雇员返回", StringComparison.Ordinal) ||
-                            text.Contains("Send retainer home", StringComparison.OrdinalIgnoreCase) ||
-                            text.Contains("Have retainer return", StringComparison.OrdinalIgnoreCase) ||
-                            text.Contains("Return retainer", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    }
+
+                    var selectedIndex = -1;
+                    for (var index = 0; index < addon->PopupMenu.List->ListLength; index++)
+                    {
+                        try
                         {
-                            selectedIndex = index;
-                            break;
+                            var text = addon->PopupMenu.List->GetItemLabel(index).ToString();
+                            if (text.Contains("让雇员返回", StringComparison.Ordinal) ||
+                                text.Contains("Send retainer home", StringComparison.OrdinalIgnoreCase) ||
+                                text.Contains("Have retainer return", StringComparison.OrdinalIgnoreCase) ||
+                                text.Contains("Return retainer", StringComparison.OrdinalIgnoreCase))
+                            {
+                                selectedIndex = index;
+                                break;
+                            }
+                        }
+                        catch
+                        {
+                            // SelectString text nodes can be invalid while the
+                            // menu is being rebuilt; skip that entry safely.
                         }
                     }
-                    catch
+
+                    if (selectedIndex < 0)
                     {
-                        // SelectString text nodes can be invalid while the
-                        // menu is being rebuilt; skip that entry safely.
+                        continue;
                     }
-                }
 
-                if (selectedIndex < 0)
-                {
-                    this.pluginLog.Verbose("Automatic undercut: return-retainer entry was not found in SelectString.");
-                    return false;
+                    var value = new AtkValue { Type = AtkValueType.Int, Int = selectedIndex };
+                    // SelectString's option callback is callback 1 (the same
+                    // callback used for selecting "Sell items in your inventory").
+                    addon->AtkUnitBase.FireCallback(1, &value, true);
+                    this.pluginLog.Verbose(
+                        $"Automatic undercut: selected return-retainer entry at SelectString instance {addonIndex}, index {selectedIndex}.");
+                    return true;
                 }
-
-                var value = new AtkValue { Type = AtkValueType.Int, Int = selectedIndex };
-                // SelectString's option callback is callback 1 (the same
-                // callback used for selecting "Sell items in your inventory").
-                addon->AtkUnitBase.FireCallback(1, &value, false);
-                this.pluginLog.Verbose($"Automatic undercut: selected return-retainer entry at index {selectedIndex}.");
-                return true;
             }
+
+            return false;
         });
     }
 
