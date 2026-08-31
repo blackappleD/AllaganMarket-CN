@@ -658,7 +658,84 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         await this.CloseAddon("ItemSearchResult", cancellationToken);
         await this.CloseAddon("RetainerSellList", cancellationToken);
         await Task.Delay(250, cancellationToken);
+
+        // Do not simply close SelectString here.  The retainer interaction
+        // menu must receive the internal "return retainer" callback first;
+        // otherwise the game remains in the current retainer's menu and the
+        // next RetainerList selection can target the wrong state.
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            if (await this.ReturnRetainer(cancellationToken))
+            {
+                if (await this.WaitForAddon("RetainerList", cancellationToken))
+                {
+                    return;
+                }
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        // Fallback for an already-closed/refreshing menu or an unexpected UI
+        // state.  This keeps cancellation and recovery paths from leaving a
+        // stale SelectString addon visible.
         await this.CloseAddon("SelectString", cancellationToken);
+    }
+
+    private Task<bool> ReturnRetainer(CancellationToken cancellationToken)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName("SelectString");
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AddonSelectString*)pointer.Address;
+                if (!this.IsReady(&addon->AtkUnitBase) || addon->PopupMenu.List == null)
+                {
+                    return false;
+                }
+
+                var selectedIndex = -1;
+                for (var index = 0; index < addon->PopupMenu.List->ListLength; index++)
+                {
+                    try
+                    {
+                        var text = addon->PopupMenu.List->GetItemLabel(index).ToString();
+                        if (text.Contains("让雇员返回", StringComparison.Ordinal) ||
+                            text.Contains("Send retainer home", StringComparison.OrdinalIgnoreCase) ||
+                            text.Contains("Have retainer return", StringComparison.OrdinalIgnoreCase) ||
+                            text.Contains("Return retainer", StringComparison.OrdinalIgnoreCase))
+                        {
+                            selectedIndex = index;
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        // SelectString text nodes can be invalid while the
+                        // menu is being rebuilt; skip that entry safely.
+                    }
+                }
+
+                if (selectedIndex < 0)
+                {
+                    this.pluginLog.Verbose("Automatic undercut: return-retainer entry was not found in SelectString.");
+                    return false;
+                }
+
+                var value = new AtkValue { Type = AtkValueType.Int, Int = selectedIndex };
+                // SelectString's option callback is callback 1 (the same
+                // callback used for selecting "Sell items in your inventory").
+                addon->AtkUnitBase.FireCallback(1, &value, false);
+                this.pluginLog.Verbose($"Automatic undercut: selected return-retainer entry at index {selectedIndex}.");
+                return true;
+            }
+        });
     }
 
     private unsafe bool IsReady(AtkUnitBase* addon)
