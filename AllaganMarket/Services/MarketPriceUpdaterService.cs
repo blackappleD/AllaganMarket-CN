@@ -24,6 +24,8 @@ namespace AllaganMarket.Services;
 public class MarketPriceUpdaterService(IGameInteropProvider gameInteropProvider, IAddonLifecycle addonLifecycle, IRetainerService retainerService, IPluginLog pluginLog)
     : IHostedService, IDisposable
 {
+    public const uint RateLimitedStatus = 0x70000003;
+
     private readonly IAddonLifecycle addonLifecycle = addonLifecycle;
     private readonly IRetainerService retainerService = retainerService;
 

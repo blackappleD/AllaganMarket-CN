@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using AllaganMarket.GameInterop;
 using AllaganMarket.Models;
 using AllaganMarket.Services.Interfaces;
 
@@ -28,10 +29,12 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
     private readonly IAddonLifecycle addonLifecycle;
     private readonly IPluginLog pluginLog;
     private readonly ICharacterMonitorService characterMonitorService;
+    private readonly MarketPriceUpdaterService marketPriceUpdaterService;
     private readonly SaleTrackerService saleTrackerService;
     private readonly UndercutService undercutService;
 
     private CancellationTokenSource? cancellationTokenSource;
+    private int marketBoardRetryRequested;
 
     public AutoUndercutService(
         IFramework framework,
@@ -39,6 +42,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         IAddonLifecycle addonLifecycle,
         IPluginLog pluginLog,
         ICharacterMonitorService characterMonitorService,
+        MarketPriceUpdaterService marketPriceUpdaterService,
         SaleTrackerService saleTrackerService,
         UndercutService undercutService)
     {
@@ -47,6 +51,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.addonLifecycle = addonLifecycle;
         this.pluginLog = pluginLog;
         this.characterMonitorService = characterMonitorService;
+        this.marketPriceUpdaterService = marketPriceUpdaterService;
         this.saleTrackerService = saleTrackerService;
         this.undercutService = undercutService;
     }
@@ -61,6 +66,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         // transient Talk addon.
         this.addonLifecycle.RegisterListener(AddonEvent.PostSetup, "Talk", this.OnTalkUpdated);
         this.addonLifecycle.RegisterListener(AddonEvent.PostUpdate, "Talk", this.OnTalkUpdated);
+        this.marketPriceUpdaterService.MarketBoardItemRequestReceived += this.MarketBoardItemRequestReceived;
         return Task.CompletedTask;
     }
 
@@ -69,6 +75,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.cancellationTokenSource?.Cancel();
         this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, "Talk", this.OnTalkUpdated);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostUpdate, "Talk", this.OnTalkUpdated);
+        this.marketPriceUpdaterService.MarketBoardItemRequestReceived -= this.MarketBoardItemRequestReceived;
         return Task.CompletedTask;
     }
 
@@ -179,6 +186,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
             return;
         }
 
+        var marketPrices = new Dictionary<(uint ItemId, bool IsHq), uint?>();
         for (var rowIndex = 0; rowIndex < saleItems.Count; rowIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -192,14 +200,17 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                 continue;
             }
 
-            // ComparePrices is the game's "view current market price" action.
-            await this.ClickRetainerSellCallback(4, cancellationToken);
-            await Task.Delay(650, cancellationToken);
-
-            // The market result is an auxiliary addon. Close it before confirming the price change.
-            await this.CloseAddon("ItemSearchResult", cancellationToken);
-
-            var recommendedPrice = await this.WaitForRecommendedPrice(saleItem, cancellationToken);
+            var marketKey = (saleItem.ItemId, saleItem.IsHq);
+            if (!marketPrices.TryGetValue(marketKey, out var recommendedPrice))
+            {
+                recommendedPrice = await this.QueryRecommendedPrice(saleItem, cancellationToken);
+                marketPrices[marketKey] = recommendedPrice;
+            }
+            else
+            {
+                this.pluginLog.Verbose(
+                    $"Automatic undercut: reusing market price for item {saleItem.ItemId} ({(saleItem.IsHq ? "HQ" : "NQ")}).");
+            }
             if (recommendedPrice is { } price && price < saleItem.UnitPrice)
             {
                 await this.SetRetainerSellPrice(price, cancellationToken);
@@ -213,22 +224,57 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         }
     }
 
-    private async Task<uint?> WaitForRecommendedPrice(SaleItem saleItem, CancellationToken cancellationToken)
+    private async Task<uint?> QueryRecommendedPrice(SaleItem saleItem, CancellationToken cancellationToken)
     {
-        uint? result = null;
-        for (var attempt = 0; attempt < 12; attempt++)
+        for (var attempt = 0; attempt < 3; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            result = this.undercutService.GetRecommendedUnitPrice(saleItem)?.Amount;
-            if (result != null)
+            Interlocked.Exchange(ref this.marketBoardRetryRequested, 0);
+
+            // ComparePrices is the game's "view current market price" action.
+            await this.ClickRetainerSellCallback(4, cancellationToken);
+            await Task.Delay(650, cancellationToken);
+
+            uint? result = null;
+            for (var wait = 0; wait < 16; wait++)
             {
-                break;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (Volatile.Read(ref this.marketBoardRetryRequested) != 0)
+                {
+                    break;
+                }
+
+                result = this.undercutService.GetRecommendedUnitPrice(saleItem)?.Amount;
+                if (result != null)
+                {
+                    break;
+                }
+
+                await Task.Delay(100, cancellationToken);
             }
 
-            await Task.Delay(125, cancellationToken);
+            if (Volatile.Read(ref this.marketBoardRetryRequested) != 0 && attempt < 2)
+            {
+                this.pluginLog.Warning(
+                    "Automatic undercut: market board asked to retry later; closing result window and retrying in 2 seconds.");
+                await this.CloseAddon("ItemSearchResult", cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                continue;
+            }
+
+            await this.CloseAddon("ItemSearchResult", cancellationToken);
+            return result ?? this.undercutService.GetRecommendedUnitPrice(saleItem)?.Amount;
         }
 
-        return result;
+        return null;
+    }
+
+    private void MarketBoardItemRequestReceived(MarketBoardItemRequest request)
+    {
+        if (this.IsRunning && request.Status == MarketPriceUpdaterService.RateLimitedStatus)
+        {
+            Interlocked.Exchange(ref this.marketBoardRetryRequested, 1);
+        }
     }
 
     private Task<bool> SelectRetainer(byte displayOrder, CancellationToken cancellationToken)

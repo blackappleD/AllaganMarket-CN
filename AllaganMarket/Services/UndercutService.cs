@@ -485,12 +485,23 @@ public class UndercutService : IHostedService, IMediatorSubscriber
     {
         if (this.expectedAmountToArrive != null)
         {
-            this.pluginLog.Error("MarketBoard offerings received did not match the expected amount to arrive : " + request.AmountToArrive);
-            this.expectedAmountToArrive = null;
+            this.pluginLog.Verbose("Resetting the previous market board offerings request.");
         }
 
         this.accumulatedListings = new();
         this.currentRequestId = null;
+
+        // A non-zero status is a request error (for example 0x70000003 means
+        // the game asks us to try again later). Do not turn this into an empty
+        // successful result: an empty successful result is a valid market state
+        // and is only represented by status 0 with AmountToArrive == 0.
+        if (!request.Ok)
+        {
+            this.expectedAmountToArrive = null;
+            this.pluginLog.Warning($"MarketBoard request failed with status 0x{request.Status:X8}.");
+            return;
+        }
+
         if (request.AmountToArrive == 0)
         {
             this.expectedAmountToArrive = 0;
