@@ -133,10 +133,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 this.pluginLog.Information($"Automatic undercut: opening retainer {retainer.Name}.");
 
-                if (!await this.SelectRetainer(retainer.DisplayOrder, cancellationToken) ||
-                    !await this.WaitForSelectString(cancellationToken) ||
-                    !await this.SelectSellInventory(cancellationToken) ||
-                    !await this.WaitForAddon("RetainerSellList", cancellationToken))
+                if (!await this.OpenRetainer(retainer, cancellationToken))
                 {
                     this.pluginLog.Error($"Automatic undercut: unable to open retainer {retainer.Name}.");
                     await this.CloseRetainerWindows(cancellationToken);
@@ -161,6 +158,37 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         {
             this.IsRunning = false;
         }
+    }
+
+    private async Task<bool> OpenRetainer(Character retainer, CancellationToken cancellationToken)
+    {
+        // The RetainerList addon is briefly refreshing after the previous
+        // retainer is closed.  Give the game time to finish that transition and
+        // retry the internal callback instead of skipping the next retainer.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!await this.WaitForAddon("RetainerList", cancellationToken))
+            {
+                await Task.Delay(250, cancellationToken);
+                continue;
+            }
+
+            if (await this.SelectRetainer(retainer.DisplayOrder, cancellationToken) &&
+                await this.WaitForSelectString(cancellationToken) &&
+                await this.SelectSellInventory(cancellationToken) &&
+                await this.WaitForAddon("RetainerSellList", cancellationToken))
+            {
+                return true;
+            }
+
+            this.pluginLog.Warning(
+                $"Automatic undercut: retainer {retainer.Name} did not finish opening (attempt {attempt + 1}/3).");
+            await this.CloseRetainerWindows(cancellationToken);
+            await Task.Delay(350, cancellationToken);
+        }
+
+        return false;
     }
 
     private async Task ProcessRetainer(Character retainer, CancellationToken cancellationToken)

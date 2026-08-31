@@ -36,7 +36,7 @@ public class RetainerListOverlayWindow : OverlayWindow
     private readonly AutoUndercutService autoUndercutService;
     private readonly HighlightingRetainerListSetting retainerListSetting;
     private readonly LocalizationService localization;
-    private bool showAllRetainers;
+    private bool showAllRetainers = true;
 
     public RetainerListOverlayWindow(
         IAddonLifecycle addonLifecycle,
