@@ -236,7 +236,8 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                 !await this.SelectContextMenuItem(cancellationToken) ||
                 !await this.WaitForAddon("RetainerSell", cancellationToken))
             {
-                this.pluginLog.Error($"Automatic undercut: unable to open listed item row {rowIndex}.");
+                this.pluginLog.Information(
+                    $"Automatic undercut: skipping listed item row {rowIndex}; no price-adjustment action is available.");
                 continue;
             }
 
@@ -565,16 +566,52 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
 
             unsafe
             {
-                var addon = (AtkUnitBase*)pointer.Address;
-                if (!this.IsReady(addon))
+                var addon = (AddonContextMenu*)pointer.Address;
+                if (!this.IsReady(&addon->AtkUnitBase))
                 {
                     return false;
                 }
 
-                // For a listed market item, the first context-menu entry is always "Adjust Price".
+                var list = addon->GetComponentListById(2);
+                if (list == null)
+                {
+                    return false;
+                }
+
+                var selectedIndex = -1;
+                for (var index = 0; index < list->ListLength; index++)
+                {
+                    try
+                    {
+                        var text = list->GetItemLabel(index).ToString();
+                        if (text.Contains("修改价格", StringComparison.Ordinal) ||
+                            text.Contains("调整价格", StringComparison.Ordinal) ||
+                            text.Contains("Adjust Price", StringComparison.OrdinalIgnoreCase) ||
+                            text.Contains("Change Price", StringComparison.OrdinalIgnoreCase))
+                        {
+                            selectedIndex = index;
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        // Context menu text can be invalid while the menu is
+                        // being rebuilt; skip that entry safely.
+                    }
+                }
+
+                if (selectedIndex < 0)
+                {
+                    // Mannequin listings and other non-retainer entries do not
+                    // expose an adjust-price action. Close the menu and let the
+                    // caller continue with the next listing.
+                    addon->AtkUnitBase.Close(true);
+                    return false;
+                }
+
                 var values = stackalloc AtkValue[3];
                 values[0] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
-                values[1] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
+                values[1] = new AtkValue { Type = AtkValueType.Int, Int = selectedIndex };
                 values[2] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
                 addon->FireCallback(3, values, true);
                 return true;
