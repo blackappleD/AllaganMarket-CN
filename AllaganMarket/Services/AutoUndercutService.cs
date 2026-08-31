@@ -339,14 +339,19 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                 var retainerManager = RetainerManager.Instance();
                 if (retainerManager != null && retainerManager->IsReady)
                 {
-                    for (byte index = 0; index < retainerManager->Retainers.Length; index++)
+                    // FireCallback expects the visible/sorted row index. Do
+                    // not invert RetainerManager.DisplayOrder here: the
+                    // manager's GetRetainerBySortedIndex already performs the
+                    // required mapping from visible row to backing slot.
+                    for (uint index = 0; index < 10; index++)
                     {
-                        if (retainerManager->Retainers[index].RetainerId != retainerId)
+                        var current = retainerManager->GetRetainerBySortedIndex(index);
+                        if (current == null || current->RetainerId != retainerId)
                         {
                             continue;
                         }
 
-                        displayOrder = retainerManager->DisplayOrder.IndexOf(index);
+                        displayOrder = (int)index;
                         break;
                     }
                 }

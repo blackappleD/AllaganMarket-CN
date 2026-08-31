@@ -189,17 +189,18 @@ public class CharacterMonitorService(
     {
         if (RetainerManager.Instance()->IsReady)
         {
-            var span = RetainerManager.Instance()->Retainers;
-            for (var index = 0; index < span.Length; index++)
+            for (uint index = 0; index < 10; index++)
             {
-                var retainer = span[index];
-                var displayOrder = RetainerManager.Instance()->DisplayOrder.IndexOf((byte)index);
-                displayOrder = displayOrder == -1 ? 0 : displayOrder;
-                var asByte = (byte)displayOrder;
-                if (this.Characters.ContainsKey(retainer.RetainerId) &&
-                    this.Characters[retainer.RetainerId].DisplayOrder != asByte)
+                var retainer = RetainerManager.Instance()->GetRetainerBySortedIndex(index);
+                if (retainer == null || retainer->RetainerId == 0 || !this.Characters.ContainsKey(retainer->RetainerId))
                 {
-                    this.Characters[retainer.RetainerId].DisplayOrder = asByte;
+                    continue;
+                }
+
+                var asByte = (byte)index;
+                if (this.Characters[retainer->RetainerId].DisplayOrder != asByte)
+                {
+                    this.Characters[retainer->RetainerId].DisplayOrder = asByte;
                 }
             }
         }
