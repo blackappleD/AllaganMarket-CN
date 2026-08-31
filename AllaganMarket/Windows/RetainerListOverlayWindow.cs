@@ -280,6 +280,12 @@ public class RetainerListOverlayWindow : OverlayWindow
                         autoUndercut != retainer.AutoUndercut)
                     {
                         retainer.AutoUndercut = autoUndercut;
+                        // Keep both references in sync. CharacterMonitor normally
+                        // shares this dictionary with Configuration, but an addon
+                        // refresh can replace a Character instance before the next
+                        // automation run.
+                        this.characterMonitorService.Characters[retainer.CharacterId] = retainer;
+                        this.configuration.Characters[retainer.CharacterId] = retainer;
                         this.configuration.IsDirty = true;
                     }
                 }

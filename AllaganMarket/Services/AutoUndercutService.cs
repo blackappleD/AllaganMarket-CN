@@ -12,6 +12,7 @@ using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Plugin.Services;
 
+using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
@@ -99,7 +100,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         }
 
         var retainers = this.characterMonitorService.GetRetainers(activeCharacter.CharacterId)
-            .Where(retainer => retainer.AutoUndercut)
+            .Where(retainer => this.IsAutoUndercutEnabled(retainer))
             .OrderBy(retainer => retainer.DisplayOrder)
             .ToList();
         if (retainers.Count == 0)
@@ -111,12 +112,23 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.cancellationTokenSource?.Dispose();
         this.cancellationTokenSource = new CancellationTokenSource();
         this.IsRunning = true;
+        this.pluginLog.Information(
+            $"Automatic undercut: selected {retainers.Count} retainer(s): {string.Join(", ", retainers.Select(retainer => $"{retainer.Name} [{retainer.CharacterId}]"))}.");
         _ = this.RunAsync(retainers, this.cancellationTokenSource.Token);
     }
 
     public void Cancel()
     {
         this.cancellationTokenSource?.Cancel();
+    }
+
+    private bool IsAutoUndercutEnabled(Character retainer)
+    {
+        // Read the persisted configuration as the source of truth. This avoids
+        // using a stale Character instance if the retainer list was refreshed
+        // between checking the box and pressing Execute.
+        return this.characterMonitorService.Characters.TryGetValue(retainer.CharacterId, out var current) &&
+               current.AutoUndercut;
     }
 
     private async Task RunAsync(IReadOnlyList<Character> retainers, CancellationToken cancellationToken)
@@ -174,7 +186,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                 continue;
             }
 
-            if (await this.SelectRetainer(retainer.DisplayOrder, cancellationToken) &&
+            if (await this.SelectRetainer(retainer.CharacterId, cancellationToken) &&
                 await this.WaitForSelectString(cancellationToken) &&
                 await this.SelectSellInventory(cancellationToken) &&
                 await this.WaitForAddon("RetainerSellList", cancellationToken))
@@ -305,7 +317,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         }
     }
 
-    private Task<bool> SelectRetainer(byte displayOrder, CancellationToken cancellationToken)
+    private Task<bool> SelectRetainer(ulong retainerId, CancellationToken cancellationToken)
     {
         return this.framework.RunOnFrameworkThread(() =>
         {
@@ -323,9 +335,31 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                     return false;
                 }
 
+                var displayOrder = -1;
+                var retainerManager = RetainerManager.Instance();
+                if (retainerManager != null && retainerManager->IsReady)
+                {
+                    for (byte index = 0; index < retainerManager->Retainers.Length; index++)
+                    {
+                        if (retainerManager->Retainers[index].RetainerId != retainerId)
+                        {
+                            continue;
+                        }
+
+                        displayOrder = retainerManager->DisplayOrder.IndexOf(index);
+                        break;
+                    }
+                }
+
+                if (displayOrder < 0)
+                {
+                    this.pluginLog.Warning($"Automatic undercut: retainer {retainerId} is not present in the current retainer list.");
+                    return false;
+                }
+
                 var values = stackalloc AtkValue[4];
                 values[0] = new AtkValue { Type = AtkValueType.Int, Int = 2 };
-                values[1] = new AtkValue { Type = AtkValueType.UInt, UInt = displayOrder };
+                values[1] = new AtkValue { Type = AtkValueType.UInt, UInt = (uint)displayOrder };
                 values[2] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
                 values[3] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
 
