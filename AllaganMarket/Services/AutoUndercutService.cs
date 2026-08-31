@@ -186,7 +186,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                 continue;
             }
 
-            if (await this.SelectRetainer(retainer.CharacterId, cancellationToken) &&
+            if (await this.SelectRetainer(retainer.CharacterId, retainer.DisplayOrder, cancellationToken) &&
                 await this.WaitForSelectString(cancellationToken) &&
                 await this.SelectSellInventory(cancellationToken) &&
                 await this.WaitForAddon("RetainerSellList", cancellationToken))
@@ -317,7 +317,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         }
     }
 
-    private Task<bool> SelectRetainer(ulong retainerId, CancellationToken cancellationToken)
+    private Task<bool> SelectRetainer(ulong retainerId, byte fallbackDisplayOrder, CancellationToken cancellationToken)
     {
         return this.framework.RunOnFrameworkThread(() =>
         {
@@ -351,10 +351,14 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                     }
                 }
 
+                // RetainerList can become visible a few frames before the
+                // manager's Retainers span is repopulated. In that window the
+                // persisted display order is still the valid callback index.
                 if (displayOrder < 0)
                 {
-                    this.pluginLog.Warning($"Automatic undercut: retainer {retainerId} is not present in the current retainer list.");
-                    return false;
+                    displayOrder = fallbackDisplayOrder;
+                    this.pluginLog.Verbose(
+                        $"Automatic undercut: retainer {retainerId} is not populated yet; using cached display order {displayOrder}.");
                 }
 
                 var values = stackalloc AtkValue[4];
