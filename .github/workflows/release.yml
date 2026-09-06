@@ -7,7 +7,8 @@ on:
       - 'v*.*.*.*'
 
 env:
-  INTERNAL_NAME: AllaganMarket
+  PROJECT: AllaganMarket
+  INTERNAL_NAME: AllaganMarketCN
   CONFIGURATION: Release
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
@@ -32,15 +33,15 @@ jobs:
           Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev\"
 
       - name: Restore
-        run: dotnet restore ${{ env.INTERNAL_NAME }}
+        run: dotnet restore ${{ env.PROJECT }}
 
       - name: Build
-        run: dotnet build -c ${{ env.CONFIGURATION }} --no-restore ${{ env.INTERNAL_NAME }}
+        run: dotnet build -c ${{ env.CONFIGURATION }} --no-restore ${{ env.PROJECT }}
 
       - name: Prepare release asset
         shell: pwsh
         run: |
-          $source = "${{ env.INTERNAL_NAME }}\bin\Release\${{ env.INTERNAL_NAME }}\latest.zip"
+          $source = "${{ env.PROJECT }}\bin\Release\${{ env.INTERNAL_NAME }}\latest.zip"
           if (-not (Test-Path $source)) {
             throw "Dalamud package was not produced: $source"
           }
