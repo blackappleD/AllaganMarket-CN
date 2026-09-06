@@ -22,12 +22,17 @@ git push origin main
 
 ## 发布
 
-项目版本号位于 `AllaganMarket/AllaganMarket.csproj`。创建四段版本 tag 后，GitHub Actions
-会构建 Dalamud 插件并在自己的 fork 创建 Release：
+项目版本号位于 `AllaganMarket/AllaganMarket.csproj`。版本号沿用 Dalamud 清单的四段格式：
+
+- 上游 `1.4.0.2` 对应你的基础版本 `1.4.0.2000`
+- 在该上游版本上的后续修改依次使用 `1.4.0.2001`、`1.4.0.2002`……
+- 上游进入 `1.4.0.3` 后，你的下一组版本从 `1.4.0.3000` 开始
+
+创建四段版本 tag 后，GitHub Actions 会构建 Dalamud 插件并在自己的 fork 创建 Release：
 
 ```powershell
-git tag v1.0.0.1
-git push origin v1.0.0.1
+git tag v1.4.0.2000
+git push origin v1.4.0.2000
 ```
 
 Release 资产固定命名为 `AllaganMarket.zip`。发布后，将该版本号和下载地址同步到
