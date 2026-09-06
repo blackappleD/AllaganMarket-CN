@@ -253,7 +253,11 @@ public class UndercutService : IHostedService, IMediatorSubscriber
 
         var marketPriceCache = this.GetMarketPriceCache(worldId, itemId, requestedQuality);
         var wasFallback = false;
-        if (this.undercutAllowFallbackSetting.CurrentValue(this.configuration) && marketPriceCache == null)
+        // Matching quality must not fall back to the other quality. Otherwise a
+        // low NQ listing can incorrectly mark an HQ listing as undercut.
+        if (this.undercutAllowFallbackSetting.CurrentValue(this.configuration) &&
+            undercutComparison != UndercutComparison.MatchingQuality &&
+            marketPriceCache == null)
         {
             marketPriceCache = this.GetMarketPriceCache(worldId, itemId, null);
             if (marketPriceCache != null)

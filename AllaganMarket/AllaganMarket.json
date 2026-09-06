@@ -1,8 +1,8 @@
 {
-    "Author": "Critical_Impact",
+    "Author": "blackappleD",
     "Name": "Allagan Market",
-    "Punchline": "Get your retainer sales organized, track active sales, historical sales and undercutting!",
-    "Description": "Allagan Market's primary purpose is to provide a list of all retainer listings/sales across all characters.\n\nIt'll do it's best to track your sales but it works best when it's always on!",
+    "Punchline": "整理雇员销售，追踪在售、历史销售和被压价情况！",
+    "Description": "Allagan Market 用于集中查看所有角色的雇员上架和销售记录，并提供实时压价提醒。\n\n建议保持插件运行，以获得更完整的销售记录。",
     "ApplicableVersion": "any",
     "Tags": [
         "market",

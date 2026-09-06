@@ -90,6 +90,7 @@
   <data name="Setting.ShowRetainerOverlay.Name" xml:space="preserve"><value>显示雇员悬浮窗？</value></data>
   <data name="Setting.UndercutAllowFallback.Name" xml:space="preserve"><value>允许压价回退</value></data>
   <data name="Setting.UndercutBy.Name" xml:space="preserve"><value>压价金额</value></data>
+  <data name="Setting.MaximumAutoUndercutPercentage.Name" xml:space="preserve"><value>单次自动降价上限</value></data>
   <data name="Setting.UndercutComparison.Name" xml:space="preserve"><value>压价比较方式</value></data>
   <data name="Setting.ViewMode.Name" xml:space="preserve"><value>销售/已售视图模式</value></data>
   <data name="Chat.Undercuts.General" xml:space="preserve"><value>压价 - 常规</value></data>
@@ -112,9 +113,10 @@
   <data name="Setting.RoundTo.Help" xml:space="preserve"><value>将推荐价格取整到该数值的倍数。</value></data>
   <data name="Setting.RoundUpDown.Help" xml:space="preserve"><value>选择推荐价格向上或向下取整。</value></data>
   <data name="Setting.ShowRetainerOverlay.Help" xml:space="preserve"><value>使用雇员窗口时显示雇员悬浮窗。</value></data>
-  <data name="Setting.UndercutAllowFallback.Help" xml:space="preserve"><value>允许根据最低 NQ 售价计算回退价格。</value></data>
+  <data name="Setting.UndercutAllowFallback.Help" xml:space="preserve"><value>没有匹配品质的商品时，允许根据另一品质的最低售价计算回退价格。选择“同品质”时不会使用回退。</value></data>
   <data name="Setting.UndercutBy.Help" xml:space="preserve"><value>从市场最低价中减去的金币数量。</value></data>
   <data name="Setting.UndercutComparison.Help" xml:space="preserve"><value>选择检测压价时比较哪些品质的商品。</value></data>
+  <data name="Setting.MaximumAutoUndercutPercentage.Help" xml:space="preserve"><value>如果推荐价相对当前挂售价的降幅超过此百分比，本次自动压价将保留原价。设置值限制在 0-100%。</value></data>
   <data name="Setting.ViewMode.Help" xml:space="preserve"><value>选择销售和已售物品使用网格或列表布局。</value></data>
   <data name="Setting.ViewMode.Choice.Grid" xml:space="preserve"><value>网格</value></data>
   <data name="Setting.ViewMode.Choice.List" xml:space="preserve"><value>列表</value></data>

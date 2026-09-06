@@ -196,18 +196,11 @@ public class RetainerSellOverlayWindow : OverlayWindow
         var currentSaleItem = this.CurrentSaleItem;
         if (this.clientState.IsLoggedIn && activeRetainer != null && currentItem != null)
         {
-            bool? isHq = null;
-            switch (this.CurrentItemFlags)
+            bool? isHq = this.CurrentItemFlags switch
             {
-                case InventoryItem.ItemFlags.None:
-                    isHq = false;
-                    break;
-                case InventoryItem.ItemFlags.HighQuality:
-                    isHq = true;
-                    break;
-                case null:
-                    break;
-            }
+                null => null,
+                var flags => flags.Value.HasFlag(InventoryItem.ItemFlags.HighQuality),
+            };
 
             var recommendedUnitPrice = this.undercutService.GetRecommendedUnitPrice(activeRetainer.WorldId, currentItem.Value.RowId, isHq ?? false, 1, false);
             var lastUpdated = this.undercutService.GetLastUpdateTime(activeRetainer.WorldId, currentItem.Value.RowId);

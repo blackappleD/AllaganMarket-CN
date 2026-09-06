@@ -11,6 +11,7 @@ namespace AllaganMarket.Features;
 public class UndercutsFeature(IEnumerable<IFormField<Configuration>> settings, LocalizationService localization) : Feature<Configuration>(
     [
         typeof(UndercutBySetting),
+        typeof(MaximumAutoUndercutPercentageSetting),
         typeof(UndercutComparisonSetting),
     ],
     settings)

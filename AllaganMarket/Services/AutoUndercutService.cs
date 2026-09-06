@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using AllaganMarket.GameInterop;
 using AllaganMarket.Models;
 using AllaganMarket.Services.Interfaces;
+using AllaganMarket.Settings;
 
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
@@ -33,6 +34,8 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
     private readonly MarketPriceUpdaterService marketPriceUpdaterService;
     private readonly SaleTrackerService saleTrackerService;
     private readonly UndercutService undercutService;
+    private readonly Configuration configuration;
+    private readonly MaximumAutoUndercutPercentageSetting maximumAutoUndercutPercentageSetting;
 
     private CancellationTokenSource? cancellationTokenSource;
     private int marketBoardRetryRequested;
@@ -45,7 +48,9 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         ICharacterMonitorService characterMonitorService,
         MarketPriceUpdaterService marketPriceUpdaterService,
         SaleTrackerService saleTrackerService,
-        UndercutService undercutService)
+        UndercutService undercutService,
+        Configuration configuration,
+        MaximumAutoUndercutPercentageSetting maximumAutoUndercutPercentageSetting)
     {
         this.framework = framework;
         this.gameGui = gameGui;
@@ -55,6 +60,8 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.marketPriceUpdaterService = marketPriceUpdaterService;
         this.saleTrackerService = saleTrackerService;
         this.undercutService = undercutService;
+        this.configuration = configuration;
+        this.maximumAutoUndercutPercentageSetting = maximumAutoUndercutPercentageSetting;
     }
 
     public bool IsRunning { get; private set; }
@@ -254,8 +261,17 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
             }
             if (recommendedPrice is { } price && price < saleItem.UnitPrice)
             {
-                await this.SetRetainerSellPrice(price, cancellationToken);
-                this.pluginLog.Information($"Automatic undercut: {saleItem.ItemId} {saleItem.UnitPrice} -> {price}.");
+                if (this.ExceedsMaximumPriceReduction(saleItem.UnitPrice, price))
+                {
+                    var reductionPercentage = (saleItem.UnitPrice - price) * 100m / saleItem.UnitPrice;
+                    this.pluginLog.Information(
+                        $"Automatic undercut: skipping item {saleItem.ItemId}; {saleItem.UnitPrice} -> {price} would reduce the price by {reductionPercentage:F2}%.");
+                }
+                else
+                {
+                    await this.SetRetainerSellPrice(price, cancellationToken);
+                    this.pluginLog.Information($"Automatic undercut: {saleItem.ItemId} {saleItem.UnitPrice} -> {price}.");
+                }
             }
 
             // Confirm even when no lower price exists, preserving the current listing price.
@@ -263,6 +279,21 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
             await this.WaitForAddon("RetainerSellList", cancellationToken);
             await Task.Delay(250, cancellationToken);
         }
+    }
+
+    private bool ExceedsMaximumPriceReduction(uint currentPrice, uint recommendedPrice)
+    {
+        if (recommendedPrice >= currentPrice || currentPrice == 0)
+        {
+            return false;
+        }
+
+        var maximumPercentage = Math.Clamp(
+            this.maximumAutoUndercutPercentageSetting.CurrentValue(this.configuration),
+            0,
+            100);
+        var reduction = currentPrice - recommendedPrice;
+        return (ulong)reduction * 100 > (ulong)currentPrice * (uint)maximumPercentage;
     }
 
     private async Task<uint?> QueryRecommendedPrice(SaleItem saleItem, CancellationToken cancellationToken)

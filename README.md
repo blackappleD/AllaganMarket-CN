@@ -38,6 +38,12 @@ This plugin relies on several core libraries and services:
 
 Contributions are welcome! Feel free to open issues or submit pull requests on the GitHub repository.
 
+## Fork maintenance and release
+
+This fork keeps the original repository as a read-only `upstream` remote and publishes releases to
+`blackappleD/AllaganMarket-CN`. See [docs/upstream-sync.md](docs/upstream-sync.md) for the sync and
+release procedure.
+
 ## Check out my other plugins
 
 - [Allagan Tools](https://github.com/Critical-Impact/InventoryTools)
