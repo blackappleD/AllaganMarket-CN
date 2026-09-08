@@ -264,6 +264,16 @@ public class UndercutService : IHostedService, IMediatorSubscriber
 
         var marketPriceCache = this.GetMarketPriceCache(worldId, itemId, requestedQuality);
         var wasFallback = false;
+
+        // Keep matching-quality comparisons strict even if a cache entry was
+        // populated by an older plugin version or an external price source.
+        if (undercutComparison == UndercutComparison.MatchingQuality &&
+            marketPriceCache != null &&
+            marketPriceCache.IsHq != isHq)
+        {
+            marketPriceCache = null;
+        }
+
         // Matching quality must not fall back to the other quality. Otherwise a
         // low NQ listing can incorrectly mark an HQ listing as undercut.
         if (this.undercutAllowFallbackSetting.CurrentValue(this.configuration) &&
@@ -350,6 +360,11 @@ public class UndercutService : IHostedService, IMediatorSubscriber
         var marketPriceCache = this.GetMarketPriceCache(worldId, itemId, requestedQuality);
         if (marketPriceCache != null)
         {
+            if (undercutComparison == UndercutComparison.MatchingQuality && marketPriceCache.IsHq != isHq)
+            {
+                return null;
+            }
+
             if (marketPriceCache.OwnPrice)
             {
                 return null;
@@ -817,7 +832,13 @@ public class UndercutService : IHostedService, IMediatorSubscriber
         {
             if (this.saleTrackerService.SaleItemsByItemId.TryGetValue(itemId, out var currentSales))
             {
-                var ourCheapestPrice = currentSales.Where(saleItem => worldId == saleItem.WorldId).DefaultIfEmpty(null)
+                // A market cache entry represents one quality only. Keep the
+                // undercut notification/update path on that same quality as
+                // well; otherwise a cheap NQ listing can make an HQ sale look
+                // undercut even when matching-quality comparison is enabled.
+                var matchingQualitySales = currentSales.Where(saleItem =>
+                    worldId == saleItem.WorldId && saleItem.IsHq == isHq);
+                var ourCheapestPrice = matchingQualitySales.DefaultIfEmpty(null)
                                                    .Min(c => c?.UnitPrice ?? 0);
                 var currentCheapestPrice = this.configuration.MarketPriceCache[worldId][itemKey];
 
@@ -825,7 +846,7 @@ public class UndercutService : IHostedService, IMediatorSubscriber
                 {
                     var undercutAmount = (uint?)(ourCheapestPrice - currentCheapestPrice.UnitCost);
 
-                    foreach (var saleItem in currentSales.Where(c => c.WorldId == worldId))
+                    foreach (var saleItem in matchingQualitySales)
                     {
                         if (!currentCheapestPrice.OwnPrice && wasUpdated)
                         {
