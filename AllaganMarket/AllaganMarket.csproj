@@ -1,8 +1,8 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <AssemblyName>AllaganMarketCN</AssemblyName>
+    <AssemblyName>AllaganMarket-bld</AssemblyName>
     <RootNamespace>AllaganMarket</RootNamespace>
-    <Version>1.4.0.2001</Version>
+    <Version>1.4.0.2002</Version>
     <Description>Helps track what items you have on sale.</Description>
     <PackageProjectUrl>https://github.com/blackappleD/AllaganMarket-CN</PackageProjectUrl>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>

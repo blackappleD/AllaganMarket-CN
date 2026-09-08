@@ -35,5 +35,5 @@ git tag v1.4.0.2000
 git push origin v1.4.0.2000
 ```
 
-Release 资产固定命名为 `AllaganMarketCN.zip`。发布后，将该版本号和下载地址同步到
+Release 资产固定命名为 `AllaganMarket-bld.zip`。发布后，将该版本号和下载地址同步到
 `blackappleD/DalamudPlugins` 的 `repo.json`。
