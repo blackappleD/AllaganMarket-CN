@@ -90,6 +90,7 @@
   <data name="Setting.ShowRetainerOverlay.Name" xml:space="preserve"><value>显示雇员悬浮窗？</value></data>
   <data name="Setting.UndercutAllowFallback.Name" xml:space="preserve"><value>允许压价回退</value></data>
   <data name="Setting.UndercutBy.Name" xml:space="preserve"><value>压价金额</value></data>
+  <data name="Setting.RaisePriceWhenLowest.Name" xml:space="preserve"><value>已是最低价时向上调价</value></data>
   <data name="Setting.MaximumAutoUndercutPercentage.Name" xml:space="preserve"><value>单次自动降价上限</value></data>
   <data name="Setting.UndercutComparison.Name" xml:space="preserve"><value>压价比较方式</value></data>
   <data name="Setting.ViewMode.Name" xml:space="preserve"><value>销售/已售视图模式</value></data>
@@ -115,6 +116,7 @@
   <data name="Setting.ShowRetainerOverlay.Help" xml:space="preserve"><value>使用雇员窗口时显示雇员悬浮窗。</value></data>
   <data name="Setting.UndercutAllowFallback.Help" xml:space="preserve"><value>没有匹配品质的商品时，允许根据另一品质的最低售价计算回退价格。选择“同品质”时不会使用回退。</value></data>
   <data name="Setting.UndercutBy.Help" xml:space="preserve"><value>从市场最低价中减去的金币数量。</value></data>
+  <data name="Setting.RaisePriceWhenLowest.Help" xml:space="preserve"><value>当自己的商品已经是最低价时，参考最低的其他玩家价格，并将挂售价调整为该价格减去压价金额。</value></data>
   <data name="Setting.UndercutComparison.Help" xml:space="preserve"><value>选择检测压价时比较哪些品质的商品。</value></data>
   <data name="Setting.MaximumAutoUndercutPercentage.Help" xml:space="preserve"><value>如果推荐价相对当前挂售价的降幅超过此百分比，本次自动压价将保留原价。设置值限制在 0-100%。</value></data>
   <data name="Setting.ViewMode.Help" xml:space="preserve"><value>选择销售和已售物品使用网格或列表布局。</value></data>

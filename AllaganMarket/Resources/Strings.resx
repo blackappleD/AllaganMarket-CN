@@ -90,6 +90,7 @@
   <data name="Setting.ShowRetainerOverlay.Name" xml:space="preserve"><value>Show Retainer Overlay?</value></data>
   <data name="Setting.UndercutAllowFallback.Name" xml:space="preserve"><value>Undercut fallback</value></data>
   <data name="Setting.UndercutBy.Name" xml:space="preserve"><value>Undercut amount</value></data>
+  <data name="Setting.RaisePriceWhenLowest.Name" xml:space="preserve"><value>Raise price when already lowest</value></data>
   <data name="Setting.MaximumAutoUndercutPercentage.Name" xml:space="preserve"><value>Maximum automatic price reduction</value></data>
   <data name="Setting.UndercutComparison.Name" xml:space="preserve"><value>Undercut comparison</value></data>
   <data name="Setting.ViewMode.Name" xml:space="preserve"><value>Sales/Sold View Mode</value></data>
@@ -115,6 +116,7 @@
   <data name="Setting.ShowRetainerOverlay.Help" xml:space="preserve"><value>Show the retainer overlay while using retainer windows.</value></data>
   <data name="Setting.UndercutAllowFallback.Help" xml:space="preserve"><value>Allow calculating a fallback price from the other quality when no matching listing exists. This is ignored when Matching Quality is selected.</value></data>
   <data name="Setting.UndercutBy.Help" xml:space="preserve"><value>How many gil to subtract from the lowest market price.</value></data>
+  <data name="Setting.RaisePriceWhenLowest.Help" xml:space="preserve"><value>When your listing is already the lowest, raise it to the lowest competing price minus the undercut amount.</value></data>
   <data name="Setting.MaximumAutoUndercutPercentage.Help" xml:space="preserve"><value>Skip an automatic undercut when the recommended price would reduce the current listing price by more than this percentage. Values are limited to 0-100%.</value></data>
   <data name="Setting.UndercutComparison.Help" xml:space="preserve"><value>Choose which quality listings are compared when detecting undercuts.</value></data>
   <data name="Setting.ViewMode.Help" xml:space="preserve"><value>Choose a grid or list layout for sales and sold items.</value></data>

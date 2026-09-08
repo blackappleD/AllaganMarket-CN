@@ -36,6 +36,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
     private readonly UndercutService undercutService;
     private readonly Configuration configuration;
     private readonly MaximumAutoUndercutPercentageSetting maximumAutoUndercutPercentageSetting;
+    private readonly RaisePriceWhenLowestSetting raisePriceWhenLowestSetting;
 
     private CancellationTokenSource? cancellationTokenSource;
     private int marketBoardRetryRequested;
@@ -50,7 +51,8 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         SaleTrackerService saleTrackerService,
         UndercutService undercutService,
         Configuration configuration,
-        MaximumAutoUndercutPercentageSetting maximumAutoUndercutPercentageSetting)
+        MaximumAutoUndercutPercentageSetting maximumAutoUndercutPercentageSetting,
+        RaisePriceWhenLowestSetting raisePriceWhenLowestSetting)
     {
         this.framework = framework;
         this.gameGui = gameGui;
@@ -62,6 +64,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.undercutService = undercutService;
         this.configuration = configuration;
         this.maximumAutoUndercutPercentageSetting = maximumAutoUndercutPercentageSetting;
+        this.raisePriceWhenLowestSetting = raisePriceWhenLowestSetting;
     }
 
     public bool IsRunning { get; private set; }
@@ -259,9 +262,15 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                 this.pluginLog.Verbose(
                     $"Automatic undercut: reusing market price for item {saleItem.ItemId} ({(saleItem.IsHq ? "HQ" : "NQ")}).");
             }
-            if (recommendedPrice is { } price && price < saleItem.UnitPrice)
+            if (recommendedPrice is { } price && price != saleItem.UnitPrice)
             {
-                if (this.ExceedsMaximumPriceReduction(saleItem.UnitPrice, price))
+                if (price > saleItem.UnitPrice &&
+                    !this.raisePriceWhenLowestSetting.CurrentValue(this.configuration))
+                {
+                    this.pluginLog.Verbose(
+                        $"Automatic undercut: keeping item {saleItem.ItemId} at {saleItem.UnitPrice}; upward repricing is disabled.");
+                }
+                else if (this.ExceedsMaximumPriceReduction(saleItem.UnitPrice, price))
                 {
                     var reductionPercentage = (saleItem.UnitPrice - price) * 100m / saleItem.UnitPrice;
                     this.pluginLog.Information(
@@ -316,7 +325,12 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                     break;
                 }
 
-                result = this.undercutService.GetRecommendedUnitPrice(saleItem)?.Amount;
+                result = this.undercutService.GetRecommendedUnitPrice(
+                    saleItem.WorldId,
+                    saleItem.ItemId,
+                    saleItem.IsHq,
+                    1,
+                    false)?.Amount;
                 if (result != null)
                 {
                     break;
@@ -335,7 +349,12 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
             }
 
             await this.CloseAddon("ItemSearchResult", cancellationToken);
-            return result ?? this.undercutService.GetRecommendedUnitPrice(saleItem)?.Amount;
+            return result ?? this.undercutService.GetRecommendedUnitPrice(
+                saleItem.WorldId,
+                saleItem.ItemId,
+                saleItem.IsHq,
+                1,
+                false)?.Amount;
         }
 
         return null;

@@ -53,6 +53,7 @@ public class UndercutService : IHostedService, IMediatorSubscriber
     private readonly IRetainerMarketService retainerMarketService;
     private readonly UndercutComparisonSetting undercutComparisonSetting;
     private readonly UndercutBySetting undercutBySetting;
+    private readonly RaisePriceWhenLowestSetting raisePriceWhenLowestSetting;
     private readonly UndercutAllowFallbackSetting undercutAllowFallbackSetting;
     private readonly RoundUpDownSetting roundUpDownSetting;
     private readonly RoundToSetting roundToSetting;
@@ -82,6 +83,7 @@ public class UndercutService : IHostedService, IMediatorSubscriber
         IRetainerMarketService retainerMarketService,
         UndercutComparisonSetting undercutComparisonSetting,
         UndercutBySetting undercutBySetting,
+        RaisePriceWhenLowestSetting raisePriceWhenLowestSetting,
         UndercutAllowFallbackSetting undercutAllowFallbackSetting,
         RoundUpDownSetting roundUpDownSetting,
         RoundToSetting roundToSetting,
@@ -103,6 +105,7 @@ public class UndercutService : IHostedService, IMediatorSubscriber
         this.retainerMarketService = retainerMarketService;
         this.undercutComparisonSetting = undercutComparisonSetting;
         this.undercutBySetting = undercutBySetting;
+        this.raisePriceWhenLowestSetting = raisePriceWhenLowestSetting;
         this.undercutAllowFallbackSetting = undercutAllowFallbackSetting;
         this.roundUpDownSetting = roundUpDownSetting;
         this.roundToSetting = roundToSetting;
@@ -209,7 +212,15 @@ public class UndercutService : IHostedService, IMediatorSubscriber
 
     public UndercutResult? GetRecommendedUnitPrice(SaleItem saleItem)
     {
-        return this.GetRecommendedUnitPrice(saleItem.WorldId, saleItem.ItemId, saleItem.IsHq, 1, false);
+        var result = this.GetRecommendedUnitPrice(saleItem.WorldId, saleItem.ItemId, saleItem.IsHq, 1, false);
+        if (result != null &&
+            result.Value.Amount > saleItem.UnitPrice &&
+            !this.raisePriceWhenLowestSetting.CurrentValue(this.configuration))
+        {
+            return new UndercutResult(saleItem.UnitPrice, result.Value.UsedFallback);
+        }
+
+        return result;
     }
 
     public UndercutResult? GetRecommendedUnitPrice(uint worldId, uint itemId, bool isHq, uint roundToVal, bool roundUpDown)
@@ -521,8 +532,16 @@ public class UndercutService : IHostedService, IMediatorSubscriber
     {
         if (response.listings != null && response.listings.Any())
         {
-            var minNqListing = response.listings.Where(c => !c.hq).DefaultIfEmpty().MinBy(c => c?.pricePerUnit);
-            var minHqListing = response.listings.Where(c => c.hq).DefaultIfEmpty().MinBy(c => c?.pricePerUnit);
+            var minNqListing = response.listings
+                .Where(c => !c.hq && !this.characterMonitorService.IsCharacterKnown(c.retainerName, worldId))
+                .DefaultIfEmpty()
+                .MinBy(c => c?.pricePerUnit) ??
+                response.listings.Where(c => !c.hq).DefaultIfEmpty().MinBy(c => c?.pricePerUnit);
+            var minHqListing = response.listings
+                .Where(c => c.hq && !this.characterMonitorService.IsCharacterKnown(c.retainerName, worldId))
+                .DefaultIfEmpty()
+                .MinBy(c => c?.pricePerUnit) ??
+                response.listings.Where(c => c.hq).DefaultIfEmpty().MinBy(c => c?.pricePerUnit);
             if (minNqListing != null)
             {
                 this.UpdateMarketPriceCache(
@@ -833,7 +852,11 @@ public class UndercutService : IHostedService, IMediatorSubscriber
             var itemId = message.Item;
             if (this.saleTrackerService.SaleItemsByItemId.TryGetValue(itemId, out var value))
             {
-                var cheapestNqListing = message.Listings.Where(c => !c.HQ).DefaultIfEmpty(null).MinBy(c => c?.PricePerUnit ?? 0);
+                var cheapestNqListing = message.Listings
+                    .Where(c => !c.HQ && !this.characterMonitorService.IsCharacterKnown(c.RetainerName, message.World))
+                    .DefaultIfEmpty(null)
+                    .MinBy(c => c?.PricePerUnit ?? 0) ??
+                    message.Listings.Where(c => !c.HQ).DefaultIfEmpty(null).MinBy(c => c?.PricePerUnit ?? 0);
                 var oldestReviewTimeNq = message.Listings.Where(c => !c.HQ).DefaultIfEmpty(null).Max(c => c?.LastReviewTime);
                 if (oldestReviewTimeNq != null && cheapestNqListing != null)
                 {
@@ -852,7 +875,11 @@ public class UndercutService : IHostedService, IMediatorSubscriber
                         ownsListing);
                 }
 
-                var cheapestHqListing = message.Listings.Where(c => c.HQ).DefaultIfEmpty(null).MinBy(c => c?.PricePerUnit ?? 0);
+                var cheapestHqListing = message.Listings
+                    .Where(c => c.HQ && !this.characterMonitorService.IsCharacterKnown(c.RetainerName, message.World))
+                    .DefaultIfEmpty(null)
+                    .MinBy(c => c?.PricePerUnit ?? 0) ??
+                    message.Listings.Where(c => c.HQ).DefaultIfEmpty(null).MinBy(c => c?.PricePerUnit ?? 0);
                 var oldestReviewTimeHq = message.Listings.Where(c => c.HQ).DefaultIfEmpty(null).Max(c => c?.LastReviewTime);
                 if (oldestReviewTimeHq != null && cheapestHqListing != null)
                 {

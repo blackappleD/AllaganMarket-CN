@@ -202,7 +202,9 @@ public class RetainerSellOverlayWindow : OverlayWindow
                 var flags => flags.Value.HasFlag(InventoryItem.ItemFlags.HighQuality),
             };
 
-            var recommendedUnitPrice = this.undercutService.GetRecommendedUnitPrice(activeRetainer.WorldId, currentItem.Value.RowId, isHq ?? false, 1, false);
+            var recommendedUnitPrice = currentSaleItem != null
+                ? this.undercutService.GetRecommendedUnitPrice(currentSaleItem)
+                : this.undercutService.GetRecommendedUnitPrice(activeRetainer.WorldId, currentItem.Value.RowId, isHq ?? false, 1, false);
             var lastUpdated = this.undercutService.GetLastUpdateTime(activeRetainer.WorldId, currentItem.Value.RowId);
             var marketCache = this.undercutService.GetMarketPriceCache(activeRetainer.WorldId, currentItem.Value.RowId, isHq);
             if (marketCache == null)
