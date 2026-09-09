@@ -21,6 +21,7 @@ namespace AllaganMarket.Services;
 public sealed class MannequinRestockService : IHostedService
 {
     private const string MannequinAddonNameValue = "HousingMannequin";
+    private const long DiagnosticIntervalMilliseconds = 2000;
 
     private static readonly InventoryType[] PlayerInventoryTypes =
     [
@@ -37,6 +38,9 @@ public sealed class MannequinRestockService : IHostedService
     private readonly IRetainerService retainerService;
     private readonly IPluginLog pluginLog;
     private readonly Configuration configuration;
+    private readonly Dictionary<nint, string> lastAddonDiagnosticStates = [];
+    private readonly Dictionary<nint, string> recentAddonDiagnostics = [];
+    private long lastDiagnosticMilliseconds;
 
     public MannequinRestockService(
         IAddonLifecycle addonLifecycle,
@@ -70,12 +74,17 @@ public sealed class MannequinRestockService : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        this.addonLifecycle.RegisterListener(AddonEvent.PostSetup, this.OnAddonLifecycleEvent);
+        this.addonLifecycle.RegisterListener(AddonEvent.PostShow, this.OnAddonLifecycleEvent);
+        this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, this.OnAddonLifecycleEvent);
+        this.addonLifecycle.RegisterListener(AddonEvent.PostDraw, this.OnAddonLifecycleEvent);
         this.addonLifecycle.RegisterListener(AddonEvent.PostSetup, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.RegisterListener(AddonEvent.PostDraw, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.RegisterListener(AddonEvent.PostShow, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.RegisterListener(AddonEvent.PreFinalize, MannequinAddonNameValue, this.OnAnyAddonFinalized);
         this.framework.Update += this.OnFrameworkUpdate;
+        this.pluginLog.Information("[MannequinDiag] service started; target addon={AddonName}.", MannequinAddonNameValue);
         this.RefreshMannequinAddon();
 
         return Task.CompletedTask;
@@ -84,6 +93,10 @@ public sealed class MannequinRestockService : IHostedService
     public Task StopAsync(CancellationToken cancellationToken)
     {
         this.framework.Update -= this.OnFrameworkUpdate;
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, this.OnAddonLifecycleEvent);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostShow, this.OnAddonLifecycleEvent);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostRefresh, this.OnAddonLifecycleEvent);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostDraw, this.OnAddonLifecycleEvent);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostRefresh, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostDraw, MannequinAddonNameValue, this.OnAnyAddonChanged);
@@ -125,6 +138,22 @@ public sealed class MannequinRestockService : IHostedService
         this.configuration.IsDirty = true;
         this.CurrentConfiguration = mannequinConfiguration;
         this.StateChanged?.Invoke();
+    }
+
+    public void DumpDiagnostics()
+    {
+        this.pluginLog.Information(
+            "[MannequinDiag] manual dump; serviceActive=true; target addon={AddonName}; trackedAddon={TrackedAddon}; trackedAddress=0x{Address:X}; visible={Visible}.",
+            MannequinAddonNameValue,
+            this.MannequinAddonName ?? "<none>",
+            this.MannequinAddonAddress,
+            this.IsMannequinWindowVisible);
+
+        this.LogKnownMannequinState("manual");
+        foreach (var diagnostic in this.recentAddonDiagnostics.Values.OrderBy(value => value, StringComparer.Ordinal))
+        {
+            this.pluginLog.Information("[MannequinDiag] recent addon: {Diagnostic}", diagnostic);
+        }
     }
 
     public unsafe IReadOnlyList<RestockItemPlan> BuildRestockPlan(MannequinConfiguration mannequinConfiguration)
@@ -232,6 +261,96 @@ public sealed class MannequinRestockService : IHostedService
     private void OnFrameworkUpdate(IFramework framework)
     {
         this.RefreshMannequinAddon();
+        if (Environment.TickCount64 - this.lastDiagnosticMilliseconds < DiagnosticIntervalMilliseconds)
+        {
+            return;
+        }
+
+        this.lastDiagnosticMilliseconds = Environment.TickCount64;
+        this.LogKnownMannequinState("poll");
+    }
+
+    private unsafe void OnAddonLifecycleEvent(AddonEvent type, AddonArgs args)
+    {
+        if (args.Addon == IntPtr.Zero)
+        {
+            return;
+        }
+
+        try
+        {
+            var addon = (AtkUnitBase*)args.Addon.Address;
+            if (addon == null)
+            {
+                return;
+            }
+
+            var addonName = addon->NameString;
+            var shouldReadText = type is AddonEvent.PostSetup or AddonEvent.PostShow ||
+                                 IsDiagnosticCandidate(addonName, string.Empty) ||
+                                 this.recentAddonDiagnostics.ContainsKey((nint)addon);
+            var text = shouldReadText ? GetNodeTextSummary(addon->RootNode) : "<text skipped>";
+            if (type == AddonEvent.PostDraw && !IsDiagnosticCandidate(addonName, text) &&
+                this.recentAddonDiagnostics.ContainsKey((nint)addon))
+            {
+                return;
+            }
+
+            this.LogAddonDiagnostic(type.ToString(), args.AddonName, addon, text, type == AddonEvent.PostDraw);
+        }
+        catch (Exception exception)
+        {
+            this.pluginLog.Error(exception, "[MannequinDiag] failed to inspect addon lifecycle event {Event}.", type);
+        }
+    }
+
+    private unsafe void LogKnownMannequinState(string source)
+    {
+        try
+        {
+            var addonAddress = this.gameGui.GetAddonByName(MannequinAddonNameValue);
+            var addon = (AtkUnitBase*)addonAddress.Address;
+            if (addon == null)
+            {
+                this.pluginLog.Information("[MannequinDiag] source={Source}; addon={AddonName}; address=0; state=not-found.", source, MannequinAddonNameValue);
+                return;
+            }
+
+            this.LogAddonDiagnostic(source, MannequinAddonNameValue, addon, GetNodeTextSummary(addon->RootNode), false);
+        }
+        catch (Exception exception)
+        {
+            this.pluginLog.Error(exception, "[MannequinDiag] failed to poll addon {AddonName}.", MannequinAddonNameValue);
+        }
+    }
+
+    private unsafe void LogAddonDiagnostic(
+        string source,
+        string argsAddonName,
+        AtkUnitBase* addon,
+        string text,
+        bool throttle)
+    {
+        var address = (nint)addon;
+        var state = $"{addon->NameString};{addon->IsReady};{addon->IsVisible};{text}";
+        if (throttle && this.lastAddonDiagnosticStates.TryGetValue(address, out var previousDiagnostic) &&
+            previousDiagnostic == state &&
+            Environment.TickCount64 - this.lastDiagnosticMilliseconds < DiagnosticIntervalMilliseconds)
+        {
+            return;
+        }
+
+        var diagnostic =
+            $"source={source}; argsName={argsAddonName}; addonName={addon->NameString}; address=0x{address:X}; ready={addon->IsReady}; visible={addon->IsVisible}; position=({addon->X:0},{addon->Y:0}); size=({addon->GetScaledWidth(true):0},{addon->GetScaledHeight(true):0}); atkValues={addon->AtkValuesCount}; nodes={addon->UldManager.NodeListCount}; text={text}";
+        this.lastAddonDiagnosticStates[address] = state;
+        this.recentAddonDiagnostics[address] = diagnostic;
+        while (this.recentAddonDiagnostics.Count > 100)
+        {
+            this.recentAddonDiagnostics.Remove(this.recentAddonDiagnostics.Keys.First());
+        }
+        this.lastDiagnosticMilliseconds = Environment.TickCount64;
+
+        this.pluginLog.Information("[MannequinDiag] {Diagnostic}", diagnostic);
     }
 
     private unsafe void RefreshMannequinAddon()
@@ -360,6 +479,45 @@ public sealed class MannequinRestockService : IHostedService
         }
 
         return false;
+    }
+
+    private static bool IsDiagnosticCandidate(string addonName, string text)
+    {
+        return addonName.Contains("Mannequin", StringComparison.OrdinalIgnoreCase) ||
+               addonName.Contains("Housing", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("服装", StringComparison.Ordinal) ||
+               text.Contains("模特", StringComparison.Ordinal) ||
+               text.Contains("商店", StringComparison.Ordinal) ||
+               text.Contains("Mannequin", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static unsafe string GetNodeTextSummary(AtkResNode* node)
+    {
+        var texts = new List<string>();
+        CollectNodeText(node, texts, 0);
+        return texts.Count == 0 ? "<none>" : string.Join(" | ", texts);
+    }
+
+    private static unsafe void CollectNodeText(AtkResNode* node, List<string> texts, int depth)
+    {
+        if (node == null || depth > 24 || texts.Count >= 20)
+        {
+            return;
+        }
+
+        if (node->Type == NodeType.Text)
+        {
+            var text = node->GetAsAtkTextNode()->NodeText.ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(text) && !texts.Contains(text, StringComparer.Ordinal))
+            {
+                texts.Add(text.Length > 80 ? text[..80] : text);
+            }
+        }
+
+        for (var child = node->ChildNode; child != null; child = child->NextSiblingNode)
+        {
+            CollectNodeText(child, texts, depth + 1);
+        }
     }
 }
 

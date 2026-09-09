@@ -8,6 +8,12 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2007] - 2026-09-10
+
+### Added
+- Added the `/amdiag` command for printing Addon lifecycle and mannequin window diagnostics to the Dalamud log.
+- Logs Addon names, addresses, visibility, dimensions, node counts, Atk value counts, and text summaries.
+
 ## [1.4.0.2006] - 2026-09-10
 
 ### Fixed

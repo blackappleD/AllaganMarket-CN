@@ -21,13 +21,18 @@ public class CommandService : IHostedService
 {
     private readonly ICommandManager commandManager;
     private readonly MediatorService mediatorService;
+    private readonly MannequinRestockService mannequinRestockService;
 
     private readonly List<CommandRegistration> commands;
 
-    public CommandService(ICommandManager commandManager, MediatorService mediatorService)
+    public CommandService(
+        ICommandManager commandManager,
+        MediatorService mediatorService,
+        MannequinRestockService mannequinRestockService)
     {
         this.commandManager = commandManager;
         this.mediatorService = mediatorService;
+        this.mannequinRestockService = mannequinRestockService;
         this.commands = new List<CommandRegistration>
         {
             new("/allaganmarket",
@@ -45,6 +50,10 @@ public class CommandService : IHostedService
             new("/amdebug",
                 "Shows the Allagan Market debug window.",
                 (args) => this.mediatorService.Publish(new ToggleWindowMessage(typeof(AllaganDebugWindow)))),
+
+            new("/amdiag",
+                "Writes mannequin addon diagnostics to the Dalamud log.",
+                (args) => this.mannequinRestockService.DumpDiagnostics()),
         };
     }
 
