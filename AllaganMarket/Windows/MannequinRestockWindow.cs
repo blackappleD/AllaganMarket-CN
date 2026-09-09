@@ -8,7 +8,6 @@ using AllaganMarket.Services;
 using DalaMock.Host.Mediator;
 
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 
@@ -54,15 +53,15 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         var configuration = this.restockService.CurrentConfiguration;
         if (configuration == null || configuration.Items.Count == 0)
         {
-            using (ImRaii.Disabled())
+            if (ImGui.Button("一键补货", new Vector2(120, 0)))
             {
-                ImGui.Button("一键补货", new Vector2(120, 0));
+                this.restockService.BeginRestock();
             }
 
             ImGui.TextWrapped(this.restockService.StatusMessage);
             if (ImGui.IsItemHovered())
             {
-                ImGui.SetTooltip("请先完成一次正常上架，采集当前模特的装备和价格。");
+                ImGui.SetTooltip("点击后采集当前模特状态；如果已保存配置，将按配置执行补货。");
             }
             return;
         }
@@ -82,12 +81,9 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         }
 
         ImGui.Spacing();
-        using (ImRaii.Disabled(plan.Count == 0 || plan.All(item => item.Source == RestockItemSource.Missing)))
+        if (ImGui.Button("一键补货", new Vector2(-1, 0)))
         {
-            if (ImGui.Button("一键补货", new Vector2(-1, 0)))
-            {
-                this.restockService.BeginRestock();
-            }
+            this.restockService.BeginRestock();
         }
 
         if (plan.Any(item => item.Source == RestockItemSource.Missing))

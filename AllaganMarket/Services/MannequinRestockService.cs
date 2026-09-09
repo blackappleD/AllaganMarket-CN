@@ -108,10 +108,22 @@ public sealed class MannequinRestockService : IHostedService
 
     public void BeginRestock()
     {
-        if (!this.IsMannequinWindowVisible || this.CurrentConfiguration == null)
+        if (!this.IsMannequinWindowVisible)
         {
-            this.StatusMessage = "请先完成一次正常上架，采集当前模特的装备和价格。";
+            this.StatusMessage = "请先打开服装模特商店设定。";
             this.pluginLog.Warning("Cannot start mannequin restock because no supported mannequin window is active.");
+            this.StateChanged?.Invoke();
+            return;
+        }
+
+        if (this.CurrentConfiguration == null)
+        {
+            this.StatusMessage = "已点击补货：当前模特配置尚未采集，请查看日志中的 MerchantSetting 结构。";
+            this.pluginLog.Information(
+                "Mannequin restock clicked, but no saved configuration is available; addon={AddonName}; address=0x{Address:X}.",
+                this.MannequinAddonName ?? MannequinAddonNameValue,
+                this.MannequinAddonAddress);
+            this.LogKnownMannequinState("restock-click");
             this.StateChanged?.Invoke();
             return;
         }
