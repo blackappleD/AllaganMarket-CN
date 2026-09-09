@@ -20,7 +20,7 @@ namespace AllaganMarket.Services;
 
 public sealed class MannequinRestockService : IHostedService
 {
-    private const string MannequinAddonNameValue = "HousingMannequin";
+    private const string MannequinAddonNameValue = "MerchantSetting";
     private const long DiagnosticIntervalMilliseconds = 2000;
 
     private static readonly InventoryType[] PlayerInventoryTypes =
