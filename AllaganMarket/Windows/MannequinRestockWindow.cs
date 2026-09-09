@@ -53,7 +53,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         var configuration = this.restockService.CurrentConfiguration;
         if (configuration == null || configuration.Items.Count == 0)
         {
-            if (ImGui.Button("一键补货", new Vector2(120, 0)))
+            if (ImGui.Button("一键补货", new Vector2(120, 0)) && !this.restockService.IsRestocking)
             {
                 this.restockService.BeginRestock();
             }
@@ -81,7 +81,8 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         }
 
         ImGui.Spacing();
-        if (ImGui.Button("一键补货", new Vector2(-1, 0)))
+        var buttonLabel = this.restockService.IsRestocking ? "补货执行中..." : "一键补货";
+        if (ImGui.Button(buttonLabel, new Vector2(-1, 0)) && !this.restockService.IsRestocking)
         {
             this.restockService.BeginRestock();
         }

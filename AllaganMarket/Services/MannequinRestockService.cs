@@ -4,15 +4,20 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using AllaganMarket.Agents;
 using AllaganMarket.Models;
 using AllaganMarket.Services.Interfaces;
 
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using Lumina.Excel;
+using Lumina.Excel.Sheets;
 
 using Microsoft.Extensions.Hosting;
 
@@ -34,30 +39,38 @@ public sealed class MannequinRestockService : IHostedService
     private readonly IAddonLifecycle addonLifecycle;
     private readonly IFramework framework;
     private readonly IGameGui gameGui;
+    private readonly ITargetManager targetManager;
     private readonly IInventoryService inventoryService;
     private readonly IRetainerService retainerService;
     private readonly IPluginLog pluginLog;
     private readonly Configuration configuration;
+    private readonly ExcelSheet<Item> itemSheet;
     private readonly Dictionary<nint, string> lastAddonDiagnosticStates = [];
     private readonly Dictionary<nint, string> recentAddonDiagnostics = [];
     private long lastDiagnosticMilliseconds;
+    private CancellationTokenSource? restockCancellationTokenSource;
+    private List<RestockItemPlan>? restockExecution;
 
     public MannequinRestockService(
         IAddonLifecycle addonLifecycle,
         IFramework framework,
         IGameGui gameGui,
+        ITargetManager targetManager,
         IInventoryService inventoryService,
         IRetainerService retainerService,
         IPluginLog pluginLog,
-        Configuration configuration)
+        Configuration configuration,
+        ExcelSheet<Item> itemSheet)
     {
         this.addonLifecycle = addonLifecycle;
         this.framework = framework;
         this.gameGui = gameGui;
+        this.targetManager = targetManager;
         this.inventoryService = inventoryService;
         this.retainerService = retainerService;
         this.pluginLog = pluginLog;
         this.configuration = configuration;
+        this.itemSheet = itemSheet;
     }
 
     public bool IsMannequinWindowVisible { get; private set; }
@@ -70,7 +83,9 @@ public sealed class MannequinRestockService : IHostedService
 
     public string StatusMessage { get; private set; } = "等待打开服装模特商店设定。";
 
-    public event Action? StateChanged;
+    public bool IsRestocking => this.restockExecution != null;
+
+    public event System.Action? StateChanged;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -92,6 +107,7 @@ public sealed class MannequinRestockService : IHostedService
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        this.restockCancellationTokenSource?.Cancel();
         this.framework.Update -= this.OnFrameworkUpdate;
         this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, this.OnAddonLifecycleEvent);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostShow, this.OnAddonLifecycleEvent);
@@ -108,6 +124,12 @@ public sealed class MannequinRestockService : IHostedService
 
     public void BeginRestock()
     {
+        if (this.restockExecution != null)
+        {
+            this.pluginLog.Information("Mannequin restock is already running; ignoring duplicate click.");
+            return;
+        }
+
         if (!this.IsMannequinWindowVisible)
         {
             this.StatusMessage = "请先打开服装模特商店设定。";
@@ -116,11 +138,16 @@ public sealed class MannequinRestockService : IHostedService
             return;
         }
 
-        if (this.CurrentConfiguration == null)
+        if (this.CurrentConfiguration == null || this.CurrentConfiguration.Items.Count == 0)
         {
-            this.StatusMessage = "已点击补货：当前模特配置尚未采集，请查看日志中的 MerchantSetting 结构。";
+            this.TryCaptureCurrentConfiguration();
+        }
+
+        if (this.CurrentConfiguration == null || this.CurrentConfiguration.Items.Count == 0)
+        {
+            this.StatusMessage = "已点击补货，但未读取到模特装备数据；请查看 MerchantSetting 槽位日志。";
             this.pluginLog.Information(
-                "Mannequin restock clicked, but no saved configuration is available; addon={AddonName}; address=0x{Address:X}.",
+                "Mannequin restock clicked, but no mannequin item data is available; addon={AddonName}; address=0x{Address:X}.",
                 this.MannequinAddonName ?? MannequinAddonNameValue,
                 this.MannequinAddonAddress);
             this.LogKnownMannequinState("restock-click");
@@ -133,10 +160,361 @@ public sealed class MannequinRestockService : IHostedService
             "Mannequin restock requested for {Count} items; {Missing} items are unavailable.",
             plan.Count,
             plan.Count(item => item.Source == RestockItemSource.Missing));
-        this.StatusMessage = plan.Count == 0
-            ? "当前没有检测到售罄装备。"
-            : "补货流程尚未启用：等待当前客户端的模特回调定义。";
+        if (plan.Count == 0)
+        {
+            this.StatusMessage = "当前没有检测到售罄装备。";
+            this.StateChanged?.Invoke();
+            return;
+        }
+
+        this.restockCancellationTokenSource = new CancellationTokenSource();
+        this.restockExecution = plan.ToList();
+        this.StatusMessage = $"开始补货：{plan.Count} 个售罄装备。";
         this.StateChanged?.Invoke();
+        _ = this.ExecuteRestockAsync(this.restockExecution, this.restockCancellationTokenSource.Token);
+    }
+
+    private async Task ExecuteRestockAsync(List<RestockItemPlan> execution, CancellationToken cancellationToken)
+    {
+        try
+        {
+            foreach (var plan in execution)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (plan.Source == RestockItemSource.Missing)
+                {
+                    this.pluginLog.Warning("[MannequinRestock] skipping slot={Slot}; item={ItemId}; source=missing.", plan.Item.EquipmentSlot, plan.Item.ItemId);
+                    continue;
+                }
+
+                if (plan.Source == RestockItemSource.RetainerInventory)
+                {
+                    this.StatusMessage = $"部位 {plan.Item.EquipmentSlot} 的装备在雇员中；请先在传唤铃打开该雇员并取出装备。";
+                    this.pluginLog.Warning(
+                        "[MannequinRestock] slot={Slot}; item={ItemId}; source=retainer; automatic bell withdrawal is not available in this build.",
+                        plan.Item.EquipmentSlot,
+                        plan.Item.ItemId);
+                    this.StateChanged?.Invoke();
+                    continue;
+                }
+
+                this.StatusMessage = $"正在补货：部位 {plan.Item.EquipmentSlot}。";
+                this.StateChanged?.Invoke();
+                await this.RestockPlayerInventoryItemAsync(plan.Item, cancellationToken);
+            }
+
+            this.StatusMessage = "补货流程已完成，请确认模特槽位状态。";
+            this.pluginLog.Information("[MannequinRestock] execution completed; items={Count}.", execution.Count);
+            await Task.Delay(250, cancellationToken);
+            if (this.IsMannequinWindowVisible)
+            {
+                this.TryCaptureCurrentConfiguration();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            this.StatusMessage = "补货流程已取消。";
+            this.pluginLog.Information("[MannequinRestock] execution cancelled.");
+        }
+        catch (Exception exception)
+        {
+            this.StatusMessage = "补货流程中断，请查看日志。";
+            this.pluginLog.Error(exception, "[MannequinRestock] execution failed.");
+        }
+        finally
+        {
+            this.restockExecution = null;
+            this.restockCancellationTokenSource?.Dispose();
+            this.restockCancellationTokenSource = null;
+            this.StateChanged?.Invoke();
+        }
+    }
+
+    private async Task RestockPlayerInventoryItemAsync(MannequinItem item, CancellationToken cancellationToken)
+    {
+        await this.WaitForAddonAsync(MannequinAddonNameValue, cancellationToken);
+        this.pluginLog.Information("[MannequinRestock] state=remove-sold-out; slot={Slot}.", item.EquipmentSlot);
+        await this.FireCallbackAsync(MannequinAddonNameValue, 13, cancellationToken, item.EquipmentSlot);
+
+        if (await this.WaitForAddonAsync("ContextMenu", cancellationToken, 10, false))
+        {
+            this.pluginLog.Information("[MannequinRestock] state=remove-context-menu; slot={Slot}.", item.EquipmentSlot);
+            await this.FireCallbackAsync("ContextMenu", 0, cancellationToken, 0, 0);
+            if (await this.WaitForAddonAsync("SelectYesno", cancellationToken, 10, false))
+            {
+                await this.FireCallbackAsync("SelectYesno", 0, cancellationToken);
+            }
+        }
+
+        await this.WaitUntilAddonGoneAsync("ContextMenu", cancellationToken);
+        await this.FireCallbackAsync(MannequinAddonNameValue, 12, cancellationToken, item.EquipmentSlot);
+        await this.WaitForAddonAsync("MerchantEquipSelect", cancellationToken);
+
+        var callback = await this.FindEquipmentCallbackAsync(item, cancellationToken);
+        if (callback < 0)
+        {
+            throw new InvalidOperationException($"未在 MerchantEquipSelect 找到物品 {item.ItemId} (HQ={item.IsHighQuality})。");
+        }
+
+        this.pluginLog.Information(
+            "[MannequinRestock] state=select-equipment; slot={Slot}; item={ItemId}; callback={Callback}.",
+            item.EquipmentSlot,
+            item.ItemId,
+            callback);
+        await this.FireCallbackAsync("MerchantEquipSelect", 19, cancellationToken, callback);
+        await this.WaitForAddonAsync("RetainerSell", cancellationToken);
+        await this.FireCallbackAsync("RetainerSell", 2, cancellationToken, (int)item.UnitPrice);
+        await this.FireCallbackAsync("RetainerSell", 0, cancellationToken);
+        await this.WaitUntilAddonGoneAsync("RetainerSell", cancellationToken);
+        await Task.Delay(250, cancellationToken);
+    }
+
+    private async Task<int> FindEquipmentCallbackAsync(MannequinItem item, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var callback = await this.framework.RunOnFrameworkThread(() => this.FindEquipmentCallback(item));
+            if (callback >= 0)
+            {
+                return callback;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        return -1;
+    }
+
+    private unsafe int FindEquipmentCallback(MannequinItem item)
+    {
+        var pointer = this.gameGui.GetAddonByName("MerchantEquipSelect");
+        if (pointer == IntPtr.Zero)
+        {
+            return -1;
+        }
+
+        var addon = (AtkUnitBase*)pointer.Address;
+        if (!this.IsReady(addon) || addon->RootNode == null)
+        {
+            return -1;
+        }
+
+        var nodes = new List<int> { 4 };
+        for (var index = 41001; index < 41051; index++)
+        {
+            nodes.Add(index);
+        }
+
+        foreach (var nodeIndex in nodes)
+        {
+            var node = GetNodeByIdChain(addon->RootNode, 1, 8, 13, nodeIndex, 3);
+            if (node == null || node->Type != NodeType.Text)
+            {
+                continue;
+            }
+
+            var text = node->GetAsAtkTextNode()->NodeText.ToString();
+            if (!this.itemSheet.TryGetRow(item.ItemId, out var sheetItem) || !text.Contains(sheetItem.Name.ToString(), StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return nodeIndex == 4 ? 0 : nodeIndex - 41000;
+        }
+
+        return -1;
+    }
+
+    private async Task FireCallbackAsync(string addonName, int callbackIndex, CancellationToken cancellationToken, params int[] arguments)
+    {
+        await this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName(addonName);
+            if (pointer == IntPtr.Zero)
+            {
+                throw new InvalidOperationException($"窗口 {addonName} 不存在，无法执行 callback {callbackIndex}。");
+            }
+
+            unsafe
+            {
+                var addon = (AtkUnitBase*)pointer.Address;
+                if (!this.IsReady(addon))
+                {
+                    throw new InvalidOperationException($"窗口 {addonName} 尚未就绪，无法执行 callback {callbackIndex}。");
+                }
+
+                var values = stackalloc AtkValue[arguments.Length];
+                for (var index = 0; index < arguments.Length; index++)
+                {
+                    values[index] = new AtkValue { Type = AtkValueType.Int, Int = arguments[index] };
+                }
+
+                addon->FireCallback((uint)callbackIndex, values, true);
+            }
+        });
+        await Task.Delay(100, cancellationToken);
+    }
+
+    private async Task<bool> WaitForAddonAsync(string addonName, CancellationToken cancellationToken, int attempts = 40, bool throwOnTimeout = true)
+    {
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var ready = await this.IsAddonReadyAsync(addonName);
+            if (ready)
+            {
+                return true;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        if (throwOnTimeout)
+        {
+            throw new TimeoutException($"等待窗口 {addonName} 超时。");
+        }
+
+        return false;
+    }
+
+    private async Task WaitUntilAddonGoneAsync(string addonName, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var ready = await this.IsAddonReadyAsync(addonName);
+            if (!ready)
+            {
+                return;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+    }
+
+    private Task<bool> IsAddonReadyAsync(string addonName)
+    {
+        return this.framework.RunOnFrameworkThread(() => this.IsAddonReadyOnFrameworkThread(addonName));
+    }
+
+    private unsafe bool IsAddonReadyOnFrameworkThread(string addonName)
+    {
+        var pointer = this.gameGui.GetAddonByName(addonName);
+        return pointer != IntPtr.Zero && this.IsReady((AtkUnitBase*)pointer.Address);
+    }
+
+    private static unsafe AtkResNode* GetNodeByIdChain(AtkResNode* root, params int[] ids)
+    {
+        var current = root;
+        foreach (var id in ids)
+        {
+            current = FindChildById(current, (uint)id);
+            if (current == null)
+            {
+                return null;
+            }
+        }
+
+        return current;
+    }
+
+    private static unsafe AtkResNode* FindChildById(AtkResNode* root, uint id)
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        for (var node = root->ChildNode; node != null; node = node->NextSiblingNode)
+        {
+            if (node->NodeId == id)
+            {
+                return node;
+            }
+
+            var descendant = FindChildById(node, id);
+            if (descendant != null)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
+    }
+
+    private unsafe bool IsReady(AtkUnitBase* addon)
+    {
+        return addon != null && addon->IsReady && addon->IsVisible;
+    }
+
+    private unsafe bool TryCaptureCurrentConfiguration()
+    {
+        try
+        {
+            var agentInfo = AgentMerchantSettingInfo.Instance();
+            if (agentInfo == null)
+            {
+                this.pluginLog.Warning("[MannequinDiag] MerchantSetting agent data is not available.");
+                return false;
+            }
+
+            var mannequinId = this.GetCurrentMannequinId();
+            var captured = new MannequinConfiguration
+            {
+                MannequinId = mannequinId,
+                RetainerId = this.retainerService.RetainerId,
+            };
+
+            var itemIndex = 0;
+            foreach (var item in agentInfo->ItemsSpan)
+            {
+                this.pluginLog.Information(
+                    "[MannequinDiag] slot={Slot}; itemId={ItemId}; itemIdWithQuality={ItemIdWithQuality}; hq={HighQuality}; price={Price}; availability={Availability}; color1={Color1}; color2={Color2}.",
+                    itemIndex,
+                    item.ItemId,
+                    item.ItemIdWithQuality,
+                    item.IsHighQuality,
+                    item.Price,
+                    item.Availability,
+                    item.Color1,
+                    item.Color2);
+
+                if (item.ItemId != 0)
+                {
+                    captured.Items.Add(new MannequinItem
+                    {
+                        EquipmentSlot = itemIndex,
+                        ItemId = item.ItemId,
+                        IsHighQuality = item.IsHighQuality,
+                        UnitPrice = item.Price > 0 ? (uint)Math.Min(item.Price, uint.MaxValue) : 0,
+                        IsSoldOut = item.Availability == 2,
+                    });
+                }
+
+                itemIndex++;
+            }
+
+            this.CurrentConfiguration = captured;
+            this.StatusMessage = $"已读取模特配置：{captured.Items.Count}/12 个槽位。";
+            this.pluginLog.Information(
+                "[MannequinDiag] captured mannequin configuration; mannequinId={MannequinId}; selectedItems=0x{SelectedItems:X8}; items={ItemCount}.",
+                captured.MannequinId,
+                agentInfo->SelectedItems,
+                captured.Items.Count);
+            this.StateChanged?.Invoke();
+            return captured.Items.Count > 0;
+        }
+        catch (Exception exception)
+        {
+            this.pluginLog.Error(exception, "[MannequinDiag] failed to capture MerchantSetting agent data.");
+            return false;
+        }
+    }
+
+    private ulong GetCurrentMannequinId()
+    {
+        return this.targetManager.Target?.GameObjectId ?? (ulong)this.MannequinAddonAddress;
     }
 
     public void SaveConfiguration(MannequinConfiguration mannequinConfiguration)
@@ -373,6 +751,7 @@ public sealed class MannequinRestockService : IHostedService
         {
             if (this.IsMannequinWindowVisible)
             {
+                this.restockCancellationTokenSource?.Cancel();
                 this.IsMannequinWindowVisible = false;
                 this.MannequinAddonAddress = IntPtr.Zero;
                 this.MannequinAddonName = null;
@@ -386,6 +765,11 @@ public sealed class MannequinRestockService : IHostedService
 
         if (addonAddress.Address == this.MannequinAddonAddress && this.IsMannequinWindowVisible)
         {
+            if (this.CurrentConfiguration == null)
+            {
+                this.TryCaptureCurrentConfiguration();
+            }
+
             return;
         }
 
@@ -395,6 +779,7 @@ public sealed class MannequinRestockService : IHostedService
         this.CurrentConfiguration = null;
         this.StatusMessage = $"已识别模特窗口：{MannequinAddonNameValue}。等待配置采集。";
         this.LogAddonSummary(addon);
+        this.TryCaptureCurrentConfiguration();
         this.StateChanged?.Invoke();
     }
 
@@ -405,6 +790,7 @@ public sealed class MannequinRestockService : IHostedService
             return;
         }
 
+        this.restockCancellationTokenSource?.Cancel();
         this.IsMannequinWindowVisible = false;
         this.MannequinAddonName = null;
         this.MannequinAddonAddress = IntPtr.Zero;
