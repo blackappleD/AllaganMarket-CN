@@ -30,6 +30,7 @@ public class Configuration : IPluginConfiguration, IConfigurable<int?>, IConfigu
     private Dictionary<uint, Dictionary<(uint, bool), MarketPriceCache>> marketPriceCache = [];
     private Dictionary<uint, UndercutComparison> undercutComparisonSettings = [];
     private Dictionary<ulong, uint> gil = [];
+    private Dictionary<ulong, MannequinConfiguration> mannequinConfigurations = [];
     private Dictionary<string, int> integerSettings = [];
     private Dictionary<string, bool> booleanSettings = [];
     private Dictionary<string, Enum> enumSettings = [];
@@ -80,6 +81,12 @@ public class Configuration : IPluginConfiguration, IConfigurable<int?>, IConfigu
     {
         get => this.gil;
         set => this.gil = value;
+    }
+
+    public Dictionary<ulong, MannequinConfiguration> MannequinConfigurations
+    {
+        get => this.mannequinConfigurations;
+        set => this.mannequinConfigurations = value;
     }
 
     public Dictionary<string, int> IntegerSettings

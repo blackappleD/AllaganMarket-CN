@@ -85,6 +85,7 @@ public class AllaganMarketPlugin : HostedPlugin
         typeof(HighlightingService),
         typeof(RetainerService),
         typeof(AutoUndercutService),
+        typeof(MannequinRestockService),
     };
 
     public List<Type> GetHostedServices()
@@ -195,6 +196,7 @@ public class AllaganMarketPlugin : HostedPlugin
         containerBuilder.RegisterType<RetainerListOverlayWindow>().As<Window>().AsSelf().SingleInstance();
         containerBuilder.RegisterType<RetainerSellListOverlayWindow>().As<Window>().AsSelf().SingleInstance();
         containerBuilder.RegisterType<RetainerSellOverlayWindow>().As<Window>().AsSelf().SingleInstance();
+        containerBuilder.RegisterType<MannequinRestockWindow>().As<Window>().AsSelf().SingleInstance();
 
         containerBuilder.Register(c => c.Resolve<IDataManager>().GameData).SingleInstance();
 

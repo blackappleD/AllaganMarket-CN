@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>AllaganMarket-bld</AssemblyName>
     <RootNamespace>AllaganMarket</RootNamespace>
-    <Version>1.4.0.2004</Version>
+    <Version>1.4.0.2005</Version>
     <Description>Helps track what items you have on sale.</Description>
     <PackageProjectUrl>https://github.com/blackappleD/AllaganMarket-CN</PackageProjectUrl>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
