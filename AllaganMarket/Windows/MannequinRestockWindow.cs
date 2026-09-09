@@ -24,13 +24,21 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         ImGuiService imGuiService,
         MannequinRestockService restockService,
         IPluginLog pluginLog)
-        : base(mediator, imGuiService, "Mannequin Restock", ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoSavedSettings)
+        : base(
+            mediator,
+            imGuiService,
+            "Mannequin Restock",
+            ImGuiWindowFlags.NoDecoration |
+            ImGuiWindowFlags.AlwaysAutoResize |
+            ImGuiWindowFlags.NoFocusOnAppearing |
+            ImGuiWindowFlags.NoSavedSettings,
+            true)
     {
         this.restockService = restockService;
         this.pluginLog = pluginLog;
         this.IsOpen = true;
         this.RespectCloseHotkey = false;
-        this.Size = new Vector2(130, 0);
+        this.Size = new Vector2(130, 32);
     }
 
     public override bool DrawConditions()
@@ -41,6 +49,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
     public override void Draw()
     {
         this.UpdatePosition();
+        this.Flags |= ImGuiWindowFlags.NoBackground;
 
         var configuration = this.restockService.CurrentConfiguration;
         if (configuration == null || configuration.Items.Count == 0)
@@ -103,9 +112,8 @@ public sealed class MannequinRestockWindow : ExtendedWindow
             if (addon != null && addon->IsVisible)
             {
                 this.Position = new Vector2(
-                    addon->X + addon->GetScaledWidth(true) - 140,
-                    addon->Y + addon->GetScaledHeight(true) - 48);
-                this.ForceMainWindow = true;
+                    addon->X + addon->GetScaledWidth(true) - 142,
+                    addon->Y + addon->GetScaledHeight(true) - 44);
             }
         }
         catch (Exception exception)

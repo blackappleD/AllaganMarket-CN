@@ -20,6 +20,8 @@ namespace AllaganMarket.Services;
 
 public sealed class MannequinRestockService : IHostedService
 {
+    private const string MannequinAddonNameValue = "HousingMannequin";
+
     private static readonly InventoryType[] PlayerInventoryTypes =
     [
         InventoryType.Inventory1,
@@ -29,6 +31,8 @@ public sealed class MannequinRestockService : IHostedService
     ];
 
     private readonly IAddonLifecycle addonLifecycle;
+    private readonly IFramework framework;
+    private readonly IGameGui gameGui;
     private readonly IInventoryService inventoryService;
     private readonly IRetainerService retainerService;
     private readonly IPluginLog pluginLog;
@@ -36,12 +40,16 @@ public sealed class MannequinRestockService : IHostedService
 
     public MannequinRestockService(
         IAddonLifecycle addonLifecycle,
+        IFramework framework,
+        IGameGui gameGui,
         IInventoryService inventoryService,
         IRetainerService retainerService,
         IPluginLog pluginLog,
         Configuration configuration)
     {
         this.addonLifecycle = addonLifecycle;
+        this.framework = framework;
+        this.gameGui = gameGui;
         this.inventoryService = inventoryService;
         this.retainerService = retainerService;
         this.pluginLog = pluginLog;
@@ -62,20 +70,25 @@ public sealed class MannequinRestockService : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        this.addonLifecycle.RegisterListener(AddonEvent.PostSetup, this.OnAnyAddonChanged);
-        this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, this.OnAnyAddonChanged);
-        this.addonLifecycle.RegisterListener(AddonEvent.PostDraw, this.OnAnyAddonChanged);
-        this.addonLifecycle.RegisterListener(AddonEvent.PreFinalize, this.OnAnyAddonFinalized);
+        this.addonLifecycle.RegisterListener(AddonEvent.PostSetup, MannequinAddonNameValue, this.OnAnyAddonChanged);
+        this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, MannequinAddonNameValue, this.OnAnyAddonChanged);
+        this.addonLifecycle.RegisterListener(AddonEvent.PostDraw, MannequinAddonNameValue, this.OnAnyAddonChanged);
+        this.addonLifecycle.RegisterListener(AddonEvent.PostShow, MannequinAddonNameValue, this.OnAnyAddonChanged);
+        this.addonLifecycle.RegisterListener(AddonEvent.PreFinalize, MannequinAddonNameValue, this.OnAnyAddonFinalized);
+        this.framework.Update += this.OnFrameworkUpdate;
+        this.RefreshMannequinAddon();
 
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, this.OnAnyAddonChanged);
-        this.addonLifecycle.UnregisterListener(AddonEvent.PostRefresh, this.OnAnyAddonChanged);
-        this.addonLifecycle.UnregisterListener(AddonEvent.PostDraw, this.OnAnyAddonChanged);
-        this.addonLifecycle.UnregisterListener(AddonEvent.PreFinalize, this.OnAnyAddonFinalized);
+        this.framework.Update -= this.OnFrameworkUpdate;
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, MannequinAddonNameValue, this.OnAnyAddonChanged);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostRefresh, MannequinAddonNameValue, this.OnAnyAddonChanged);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostDraw, MannequinAddonNameValue, this.OnAnyAddonChanged);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PostShow, MannequinAddonNameValue, this.OnAnyAddonChanged);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PreFinalize, MannequinAddonNameValue, this.OnAnyAddonFinalized);
 
         return Task.CompletedTask;
     }
@@ -188,35 +201,69 @@ public sealed class MannequinRestockService : IHostedService
             return;
         }
 
-        if (type == AddonEvent.PostDraw)
+        if (this.IsMannequinAddon(args.Addon.Address))
         {
-            if (args.Addon.Address != this.MannequinAddonAddress)
+            if (args.Addon.Address != this.MannequinAddonAddress || !this.IsMannequinWindowVisible)
             {
-                return;
+                this.IsMannequinWindowVisible = true;
+                this.MannequinAddonName = args.AddonName;
+                this.MannequinAddonAddress = args.Addon.Address;
+                this.CurrentConfiguration = null;
+                this.StatusMessage = $"已识别模特窗口：{args.AddonName}。等待配置采集。";
+                this.LogAddonSummary((AtkUnitBase*)args.Addon.Address);
+                this.StateChanged?.Invoke();
             }
 
-            var addon = (AtkUnitBase*)args.Addon.Address;
-            var isVisible = addon != null && addon->IsReady && addon->IsVisible;
-            if (this.IsMannequinWindowVisible != isVisible)
+            if (type == AddonEvent.PostDraw)
             {
-                this.IsMannequinWindowVisible = isVisible;
+                var addon = (AtkUnitBase*)args.Addon.Address;
+                var isVisible = addon != null && addon->IsReady && addon->IsVisible;
+                if (this.IsMannequinWindowVisible != isVisible)
+                {
+                    this.IsMannequinWindowVisible = isVisible;
+                    this.StateChanged?.Invoke();
+                }
+            }
+
+            return;
+        }
+    }
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        this.RefreshMannequinAddon();
+    }
+
+    private unsafe void RefreshMannequinAddon()
+    {
+        var addonAddress = this.gameGui.GetAddonByName(MannequinAddonNameValue);
+        var addon = (AtkUnitBase*)addonAddress.Address;
+        if (addon == null || !addon->IsReady || !addon->IsVisible)
+        {
+            if (this.IsMannequinWindowVisible)
+            {
+                this.IsMannequinWindowVisible = false;
+                this.MannequinAddonAddress = IntPtr.Zero;
+                this.MannequinAddonName = null;
+                this.CurrentConfiguration = null;
+                this.StatusMessage = "等待打开服装模特商店设定。";
                 this.StateChanged?.Invoke();
             }
 
             return;
         }
 
-        if (!this.IsMannequinAddon(args.Addon.Address))
+        if (addonAddress.Address == this.MannequinAddonAddress && this.IsMannequinWindowVisible)
         {
             return;
         }
 
         this.IsMannequinWindowVisible = true;
-        this.MannequinAddonName = args.AddonName;
-        this.MannequinAddonAddress = args.Addon.Address;
+        this.MannequinAddonName = MannequinAddonNameValue;
+        this.MannequinAddonAddress = addonAddress.Address;
         this.CurrentConfiguration = null;
-        this.StatusMessage = $"已识别模特窗口：{args.AddonName}。等待配置采集。";
-        this.LogAddonSummary((AtkUnitBase*)args.Addon.Address);
+        this.StatusMessage = $"已识别模特窗口：{MannequinAddonNameValue}。等待配置采集。";
+        this.LogAddonSummary(addon);
         this.StateChanged?.Invoke();
     }
 
@@ -243,7 +290,9 @@ public sealed class MannequinRestockService : IHostedService
             return false;
         }
 
-        if (addon->NameString.Contains("Mannequin", StringComparison.OrdinalIgnoreCase))
+        var addonName = addon->NameString;
+        if (addonName.Equals(MannequinAddonNameValue, StringComparison.Ordinal) ||
+            addonName.Contains("Mannequin", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -292,8 +341,11 @@ public sealed class MannequinRestockService : IHostedService
         if (node->Type == NodeType.Text)
         {
             var text = node->GetAsAtkTextNode()->NodeText.ToString();
-            if (text.Contains("服装模特商店设定", StringComparison.Ordinal) ||
-                text.Contains("Mannequin Shop Settings", StringComparison.OrdinalIgnoreCase))
+            if (text.Contains("服装模特", StringComparison.Ordinal) ||
+                text.Contains("模特商店", StringComparison.Ordinal) ||
+                text.Contains("商店设定", StringComparison.Ordinal) ||
+                text.Contains("Mannequin", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("Shop Settings", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

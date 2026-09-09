@@ -8,6 +8,12 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2006] - 2026-09-10
+
+### Fixed
+- Bind the mannequin overlay directly to the `HousingMannequin` addon and poll for an already-open window after plugin reload.
+- Keep the restock button overlay above the native mannequin settings window and align it with the lower-right action area.
+
 ## [1.4.0.2005] - 2026-09-10
 
 ### Added
