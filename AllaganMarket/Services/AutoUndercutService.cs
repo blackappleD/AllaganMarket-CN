@@ -40,6 +40,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
 
     private CancellationTokenSource? cancellationTokenSource;
     private int marketBoardRetryRequested;
+    private long lastProcessedMarketItemId = -1;
 
     public AutoUndercutService(
         IFramework framework,
@@ -78,6 +79,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.addonLifecycle.RegisterListener(AddonEvent.PostSetup, "Talk", this.OnTalkUpdated);
         this.addonLifecycle.RegisterListener(AddonEvent.PostUpdate, "Talk", this.OnTalkUpdated);
         this.marketPriceUpdaterService.MarketBoardItemRequestReceived += this.MarketBoardItemRequestReceived;
+        this.undercutService.MarketOfferingsProcessed += this.OnMarketOfferingsProcessed;
         return Task.CompletedTask;
     }
 
@@ -87,6 +89,7 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, "Talk", this.OnTalkUpdated);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostUpdate, "Talk", this.OnTalkUpdated);
         this.marketPriceUpdaterService.MarketBoardItemRequestReceived -= this.MarketBoardItemRequestReceived;
+        this.undercutService.MarketOfferingsProcessed -= this.OnMarketOfferingsProcessed;
         return Task.CompletedTask;
     }
 
@@ -311,13 +314,21 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             Interlocked.Exchange(ref this.marketBoardRetryRequested, 0);
+            Interlocked.Exchange(ref this.lastProcessedMarketItemId, -1);
 
             // ComparePrices is the game's "view current market price" action.
             await this.ClickRetainerSellCallback(4, cancellationToken);
             await Task.Delay(650, cancellationToken);
 
             uint? result = null;
-            for (var wait = 0; wait < 16; wait++)
+            var comparePricesRetried = false;
+            var offeringsProcessed = false;
+
+            // Busy items stream their listings across several packets and the
+            // market price cache is only written after the full batch arrives,
+            // so this has to wait for the processed signal instead of sampling
+            // the cache for a second or two.
+            for (var wait = 0; wait < 100; wait++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (Volatile.Read(ref this.marketBoardRetryRequested) != 0)
@@ -325,15 +336,27 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                     break;
                 }
 
-                result = this.undercutService.GetRecommendedUnitPrice(
-                    saleItem.WorldId,
-                    saleItem.ItemId,
-                    saleItem.IsHq,
-                    1,
-                    false)?.Amount;
-                if (result != null)
+                offeringsProcessed = Interlocked.Read(ref this.lastProcessedMarketItemId) == saleItem.ItemId;
+                if (offeringsProcessed)
                 {
+                    result = this.undercutService.GetRecommendedUnitPrice(
+                        saleItem.WorldId,
+                        saleItem.ItemId,
+                        saleItem.IsHq,
+                        1,
+                        false)?.Amount;
                     break;
+                }
+
+                // The compare-prices callback can be dropped while RetainerSell
+                // is still refreshing; issue it once more if the results window
+                // never opened.
+                if (!comparePricesRetried && wait == 20 && !await this.IsAddonReady("ItemSearchResult"))
+                {
+                    comparePricesRetried = true;
+                    this.pluginLog.Warning(
+                        $"Automatic undercut: the compare-prices window did not open for item {saleItem.ItemId}; clicking compare prices again.");
+                    await this.ClickRetainerSellCallback(4, cancellationToken);
                 }
 
                 await Task.Delay(100, cancellationToken);
@@ -348,6 +371,12 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                 continue;
             }
 
+            if (!offeringsProcessed)
+            {
+                this.pluginLog.Warning(
+                    $"Automatic undercut: no market board data arrived for item {saleItem.ItemId} within 10 seconds; falling back to the cached price.");
+            }
+
             await this.CloseAddon("ItemSearchResult", cancellationToken);
             return result ?? this.undercutService.GetRecommendedUnitPrice(
                 saleItem.WorldId,
@@ -358,6 +387,14 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         }
 
         return null;
+    }
+
+    private void OnMarketOfferingsProcessed(uint worldId, uint itemId)
+    {
+        if (this.IsRunning)
+        {
+            Interlocked.Exchange(ref this.lastProcessedMarketItemId, itemId);
+        }
     }
 
     private void MarketBoardItemRequestReceived(MarketBoardItemRequest request)

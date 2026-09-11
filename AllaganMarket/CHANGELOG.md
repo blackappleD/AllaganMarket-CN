@@ -8,6 +8,12 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2011] - 2026-09-12
+
+### Fixed
+- Automatic undercut no longer requires manually viewing an item's market price first: the flow now waits (up to 10 seconds per item) for the full market board offerings batch to be processed into the price cache instead of sampling the cache for under two seconds, which always missed multi-packet listings on busy items.
+- Re-click the compare-prices button once when the results window fails to open, and log a warning when no market data arrives so the fallback to cached prices is visible.
+
 ## [1.4.0.2010] - 2026-09-10
 
 ### Added

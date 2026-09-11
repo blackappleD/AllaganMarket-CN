@@ -63,7 +63,17 @@ public class UndercutService : IHostedService, IMediatorSubscriber
 
     public delegate void ItemUndercutDelegate(ulong retainerId, uint itemId);
 
+    public delegate void MarketOfferingsProcessedDelegate(uint worldId, uint itemId);
+
     public event ItemUndercutDelegate? ItemUndercut;
+
+    /// <summary>
+    /// Fired once a full batch of in-game market board offerings has been
+    /// processed and the market price cache reflects the result. Listings for
+    /// busy items arrive across several packets, so this is the only reliable
+    /// signal that the cache is up to date for the requested item.
+    /// </summary>
+    public event MarketOfferingsProcessedDelegate? MarketOfferingsProcessed;
 
     public readonly record struct UndercutResult(uint Amount, bool UsedFallback);
 
@@ -630,6 +640,7 @@ public class UndercutService : IHostedService, IMediatorSubscriber
             }
 
             var offeringDate = DateTime.Now;
+            var processedItemId = 0u;
             if (listings.Count == 0)
             {
                 this.pluginLog.Verbose(
@@ -637,6 +648,7 @@ public class UndercutService : IHostedService, IMediatorSubscriber
                 var selectedItem = this.inventoryService.GetInventorySlot(InventoryType.BlockedItems, 0);
                 if (selectedItem != null && selectedItem->ItemId != 0)
                 {
+                    processedItemId = selectedItem->ItemId;
                     var activeSales = this.saleTrackerService.GetSales(null, currentPlayer.HomeWorld.RowId)
                                           .GroupBy(c => c.ItemId).ToDictionary(c => c.Key, c => c.ToList());
                     if (activeSales.TryGetValue(selectedItem->ItemId, out var currentSales))
@@ -652,6 +664,7 @@ public class UndercutService : IHostedService, IMediatorSubscriber
             else
             {
                 var itemId = listings[0].ItemId;
+                processedItemId = itemId;
 
                 // Find the lowest NQ listing from a character that is not ours
                 var lowestOfferingNq = listings.Where(
@@ -712,6 +725,11 @@ public class UndercutService : IHostedService, IMediatorSubscriber
                         this.RemoveMarketPriceCache(itemId, true, currentPlayer.HomeWorld.RowId, offeringDate);
                     }
                 }
+            }
+
+            if (processedItemId != 0)
+            {
+                this.MarketOfferingsProcessed?.Invoke(currentPlayer.HomeWorld.RowId, processedItemId);
             }
         }
         else
