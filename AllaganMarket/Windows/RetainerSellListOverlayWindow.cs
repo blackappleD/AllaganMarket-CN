@@ -50,6 +50,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
     private bool batchListIsHq;
     private int batchListStackCount = 1;
     private bool batchListRefreshPrice = true;
+    private string batchListSearchText = string.Empty;
 
     public RetainerSellListOverlayWindow(
         IAddonLifecycle addonLifecycle,
@@ -329,17 +330,34 @@ public class RetainerSellListOverlayWindow : OverlayWindow
             }
 
             ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
-            using (var combo = ImRaii.Combo("##batch-list-item", candidates[selectedIndex].Label))
+            using (var combo = ImRaii.Combo("##batch-list-item", candidates[selectedIndex].Label, ImGuiComboFlags.HeightLarge))
             {
                 if (combo)
                 {
+                    if (ImGui.IsWindowAppearing())
+                    {
+                        this.batchListSearchText = string.Empty;
+                        ImGui.SetKeyboardFocusHere();
+                    }
+
+                    ImGui.SetNextItemWidth(-1);
+                    ImGui.InputTextWithHint("##batch-list-search", "搜索物品……", ref this.batchListSearchText, 64);
+                    ImGui.Separator();
+
                     for (var index = 0; index < candidates.Count; index++)
                     {
+                        if (this.batchListSearchText.Length > 0 &&
+                            !candidates[index].Label.Contains(this.batchListSearchText, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
                         if (ImGui.Selectable(candidates[index].Label, index == selectedIndex))
                         {
                             this.batchListItemId = candidates[index].ItemId;
                             this.batchListIsHq = candidates[index].IsHq;
                             this.batchListStackCount = candidates[index].StackCount;
+                            ImGui.CloseCurrentPopup();
                         }
                     }
                 }
@@ -387,14 +405,14 @@ public class RetainerSellListOverlayWindow : OverlayWindow
             {
                 if (ImGui.Button("批量收回给雇员##batch-retract-retainer"))
                 {
-                    this.autoListingService.StartRetractAll(true);
+                    this.autoListingService.StartRetractAll(true, this.batchListStackCount);
                 }
 
                 ImGui.SameLine();
 
                 if (ImGui.Button("批量收回给自己##batch-retract-self"))
                 {
-                    this.autoListingService.StartRetractAll(false);
+                    this.autoListingService.StartRetractAll(false, this.batchListStackCount);
                 }
             }
 

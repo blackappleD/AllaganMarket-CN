@@ -8,6 +8,14 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2014] - 2026-09-12
+
+### Added
+- The batch listing item picker now has a search box that auto-focuses when the dropdown opens and filters items as you type.
+
+### Changed
+- Batch retract now removes only as many listings as the stack count input specifies (starting from the top row) instead of always retracting everything.
+
 ## [1.4.0.2013] - 2026-09-12
 
 ### Added

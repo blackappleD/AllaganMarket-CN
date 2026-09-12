@@ -126,7 +126,7 @@ public sealed class AutoListingService : IHostedService, IDisposable
         _ = this.RunAsync(activeRetainer.WorldId, itemId, isHq, stackCount, refreshMarketPrice, this.cancellationTokenSource!.Token);
     }
 
-    public void StartRetractAll(bool returnToRetainer)
+    public void StartRetractAll(bool returnToRetainer, int count)
     {
         if (this.IsRunning || !this.CheckNoOtherAutomation())
         {
@@ -139,9 +139,10 @@ public sealed class AutoListingService : IHostedService, IDisposable
             return;
         }
 
-        this.BeginRun(returnToRetainer ? "开始批量收回给雇员。" : "开始批量收回给自己。");
-        this.pluginLog.Information($"Batch retract: returnToRetainer={returnToRetainer}.");
-        _ = this.RunRetractAsync(returnToRetainer, this.cancellationTokenSource!.Token);
+        count = Math.Clamp(count, 1, MaxMarketSlots);
+        this.BeginRun(returnToRetainer ? $"开始批量收回给雇员：{count} 件。" : $"开始批量收回给自己：{count} 件。");
+        this.pluginLog.Information($"Batch retract: returnToRetainer={returnToRetainer}, count={count}.");
+        _ = this.RunRetractAsync(returnToRetainer, count, this.cancellationTokenSource!.Token);
     }
 
     public void Cancel()
@@ -292,26 +293,26 @@ public sealed class AutoListingService : IHostedService, IDisposable
         }
     }
 
-    private async Task RunRetractAsync(bool returnToRetainer, CancellationToken cancellationToken)
+    private async Task RunRetractAsync(bool returnToRetainer, int count, CancellationToken cancellationToken)
     {
         var retracted = 0;
         var target = returnToRetainer ? "雇员" : "自己";
         try
         {
-            while (true)
+            while (retracted < count)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (!await this.WaitForAddon("RetainerSellList", cancellationToken, 10))
                 {
-                    this.StatusMessage = $"出售品列表已关闭，批量收回中止（已收回 {retracted} 件）。";
+                    this.StatusMessage = $"出售品列表已关闭，批量收回中止（已收回 {retracted}/{count} 件）。";
                     return;
                 }
 
                 var remaining = await this.CountMarketItems();
                 if (remaining == 0)
                 {
-                    this.StatusMessage = $"批量收回给{target}完成：{retracted} 件。";
+                    this.StatusMessage = $"批量收回结束：已收回 {retracted}/{count} 件，出售列表已空。";
                     return;
                 }
 
@@ -319,7 +320,7 @@ public sealed class AutoListingService : IHostedService, IDisposable
                 if (!await this.SelectListedItem(0) ||
                     !await this.WaitForAddon("ContextMenu", cancellationToken, 20))
                 {
-                    this.StatusMessage = $"无法打开在售物品右键菜单（已收回 {retracted} 件）。";
+                    this.StatusMessage = $"无法打开在售物品右键菜单（已收回 {retracted}/{count} 件）。";
                     return;
                 }
 
@@ -328,7 +329,7 @@ public sealed class AutoListingService : IHostedService, IDisposable
                     : await this.SelectContextMenuEntry(["收回给自己"], ["Return to Inventory", "Take Back"]);
                 if (!entrySelected)
                 {
-                    this.StatusMessage = $"右键菜单中没有“收回给{target}”选项（已收回 {retracted} 件）。";
+                    this.StatusMessage = $"右键菜单中没有“收回给{target}”选项（已收回 {retracted}/{count} 件）。";
                     return;
                 }
 
@@ -349,24 +350,26 @@ public sealed class AutoListingService : IHostedService, IDisposable
 
                 if (!removed)
                 {
-                    this.StatusMessage = $"收回未生效，批量收回中止（已收回 {retracted} 件）；请检查背包或雇员的剩余空间。";
+                    this.StatusMessage = $"收回未生效，批量收回中止（已收回 {retracted}/{count} 件）；请检查背包或雇员的剩余空间。";
                     return;
                 }
 
                 retracted++;
-                this.StatusMessage = $"已收回给{target} {retracted} 件……";
-                this.pluginLog.Information($"Batch retract: removed listing {retracted}, returnToRetainer={returnToRetainer}.");
+                this.StatusMessage = $"已收回给{target} {retracted}/{count} 件……";
+                this.pluginLog.Information($"Batch retract: removed listing {retracted}/{count}, returnToRetainer={returnToRetainer}.");
                 await Task.Delay(300, cancellationToken);
             }
+
+            this.StatusMessage = $"批量收回给{target}完成：{retracted}/{count} 件。";
         }
         catch (OperationCanceledException)
         {
-            this.StatusMessage = $"批量收回已取消（已收回 {retracted} 件）。";
+            this.StatusMessage = $"批量收回已取消（已收回 {retracted}/{count} 件）。";
             this.pluginLog.Information("Batch retract cancelled.");
         }
         catch (Exception ex)
         {
-            this.StatusMessage = $"批量收回失败（已收回 {retracted} 件），请查看日志。";
+            this.StatusMessage = $"批量收回失败（已收回 {retracted}/{count} 件），请查看日志。";
             this.pluginLog.Error($"Batch retract failed: {ex}");
         }
         finally
