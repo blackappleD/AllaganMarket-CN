@@ -34,6 +34,7 @@ public class RetainerListOverlayWindow : OverlayWindow
     private readonly ShowRetainerOverlaySetting retainerOverlaySetting;
     private readonly UndercutService undercutService;
     private readonly AutoUndercutService autoUndercutService;
+    private readonly AutoListingService autoListingService;
     private readonly HighlightingRetainerListSetting retainerListSetting;
     private readonly LocalizationService localization;
     private bool showAllRetainers = true;
@@ -54,6 +55,7 @@ public class RetainerListOverlayWindow : OverlayWindow
         ShowRetainerOverlaySetting retainerOverlaySetting,
         UndercutService undercutService,
         AutoUndercutService autoUndercutService,
+        AutoListingService autoListingService,
         HighlightingRetainerListSetting retainerListSetting,
         LocalizationService localization)
         : base(addonLifecycle, gameGui, logger, mediator, imGuiService, "Retainer List Overlay")
@@ -68,6 +70,7 @@ public class RetainerListOverlayWindow : OverlayWindow
         this.retainerOverlaySetting = retainerOverlaySetting;
         this.undercutService = undercutService;
         this.autoUndercutService = autoUndercutService;
+        this.autoListingService = autoListingService;
         this.retainerListSetting = retainerListSetting;
         this.localization = localization;
         this.AttachAddon("RetainerList", AttachPosition.Right);
@@ -156,7 +159,7 @@ public class RetainerListOverlayWindow : OverlayWindow
 
         ImGui.SameLine();
 
-        using (ImRaii.Disabled(this.autoUndercutService.IsRunning))
+        using (ImRaii.Disabled(this.autoUndercutService.IsRunning || this.autoListingService.IsRunning))
         {
             if (ImGuiService.DrawIconButton(
                     this.font,

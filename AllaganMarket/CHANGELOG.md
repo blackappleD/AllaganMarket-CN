@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2012] - 2026-09-12
+
+### Added
+- Batch listing: the retainer sell list overlay now has a "批量上架" section that lists multiple stacks of an inventory item in one click. It repeats the native put-up-for-sale flow through addon callbacks, fetches the recommended price once (optionally refreshing it from the market board first) and reuses it for every stack until the requested count, the free market slots, or the inventory stacks run out.
+
 ## [1.4.0.2011] - 2026-09-12
 
 ### Fixed
