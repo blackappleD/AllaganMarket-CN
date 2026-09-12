@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -106,22 +107,8 @@ public sealed class AutoListingService : IHostedService, IDisposable
 
     public void Start(uint itemId, bool isHq, int stackCount, bool refreshMarketPrice)
     {
-        if (this.IsRunning)
+        if (this.IsRunning || !this.CheckNoOtherAutomation())
         {
-            return;
-        }
-
-        // The auto-undercut and mannequin flows drive the same RetainerSell and
-        // ContextMenu addons; two loops firing callbacks at once would race.
-        if (this.autoUndercutService.IsRunning)
-        {
-            this.StatusMessage = "自动压价正在运行，请等待其完成后再批量上架。";
-            return;
-        }
-
-        if (this.mannequinRestockService.IsRestocking)
-        {
-            this.StatusMessage = "人偶补货正在运行，请等待其完成后再批量上架。";
             return;
         }
 
@@ -133,19 +120,61 @@ public sealed class AutoListingService : IHostedService, IDisposable
         }
 
         stackCount = Math.Clamp(stackCount, 1, MaxMarketSlots);
-        this.cancellationTokenSource?.Cancel();
-        this.cancellationTokenSource?.Dispose();
-        this.cancellationTokenSource = new CancellationTokenSource();
-        this.IsRunning = true;
-        this.StatusMessage = $"开始批量上架：{stackCount} 组。";
+        this.BeginRun($"开始批量上架：{stackCount} 组。");
         this.pluginLog.Information(
             $"Batch listing: item {itemId} ({(isHq ? "HQ" : "NQ")}), {stackCount} stack(s), refreshMarketPrice={refreshMarketPrice}.");
-        _ = this.RunAsync(activeRetainer.WorldId, itemId, isHq, stackCount, refreshMarketPrice, this.cancellationTokenSource.Token);
+        _ = this.RunAsync(activeRetainer.WorldId, itemId, isHq, stackCount, refreshMarketPrice, this.cancellationTokenSource!.Token);
+    }
+
+    public void StartRetractAll(bool returnToRetainer)
+    {
+        if (this.IsRunning || !this.CheckNoOtherAutomation())
+        {
+            return;
+        }
+
+        if (this.characterMonitorService.ActiveRetainer == null)
+        {
+            this.StatusMessage = "请先打开雇员的出售品列表。";
+            return;
+        }
+
+        this.BeginRun(returnToRetainer ? "开始批量收回给雇员。" : "开始批量收回给自己。");
+        this.pluginLog.Information($"Batch retract: returnToRetainer={returnToRetainer}.");
+        _ = this.RunRetractAsync(returnToRetainer, this.cancellationTokenSource!.Token);
     }
 
     public void Cancel()
     {
         this.cancellationTokenSource?.Cancel();
+    }
+
+    // The auto-undercut and mannequin flows drive the same RetainerSell and
+    // ContextMenu addons; two loops firing callbacks at once would race.
+    private bool CheckNoOtherAutomation()
+    {
+        if (this.autoUndercutService.IsRunning)
+        {
+            this.StatusMessage = "自动压价正在运行，请等待其完成。";
+            return false;
+        }
+
+        if (this.mannequinRestockService.IsRestocking)
+        {
+            this.StatusMessage = "人偶补货正在运行，请等待其完成。";
+            return false;
+        }
+
+        return true;
+    }
+
+    private void BeginRun(string statusMessage)
+    {
+        this.cancellationTokenSource?.Cancel();
+        this.cancellationTokenSource?.Dispose();
+        this.cancellationTokenSource = new CancellationTokenSource();
+        this.IsRunning = true;
+        this.StatusMessage = statusMessage;
     }
 
     private async Task RunAsync(
@@ -172,14 +201,14 @@ public sealed class AutoListingService : IHostedService, IDisposable
 
                 if (!await this.HasFreeMarketSlot())
                 {
-                    this.StatusMessage = $"雇员出售槽位已满（已上架 {listed}/{stackCount} 组）。";
+                    this.StatusMessage = $"批量上架结束：已上架 {listed}/{stackCount} 组，出售槽位已满。";
                     return;
                 }
 
                 var inventorySlot = await this.FindInventoryStack(itemId, isHq);
                 if (inventorySlot == null)
                 {
-                    this.StatusMessage = $"背包中已没有该物品（已上架 {listed}/{stackCount} 组）。";
+                    this.StatusMessage = $"批量上架结束：已上架 {listed}/{stackCount} 组，背包已无该物品。";
                     return;
                 }
 
@@ -261,6 +290,143 @@ public sealed class AutoListingService : IHostedService, IDisposable
         {
             this.IsRunning = false;
         }
+    }
+
+    private async Task RunRetractAsync(bool returnToRetainer, CancellationToken cancellationToken)
+    {
+        var retracted = 0;
+        var target = returnToRetainer ? "雇员" : "自己";
+        try
+        {
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!await this.WaitForAddon("RetainerSellList", cancellationToken, 10))
+                {
+                    this.StatusMessage = $"出售品列表已关闭，批量收回中止（已收回 {retracted} 件）。";
+                    return;
+                }
+
+                var remaining = await this.CountMarketItems();
+                if (remaining == 0)
+                {
+                    this.StatusMessage = $"批量收回给{target}完成：{retracted} 件。";
+                    return;
+                }
+
+                // Rows shift up after each removal, so always operate on row 0.
+                if (!await this.SelectListedItem(0) ||
+                    !await this.WaitForAddon("ContextMenu", cancellationToken, 20))
+                {
+                    this.StatusMessage = $"无法打开在售物品右键菜单（已收回 {retracted} 件）。";
+                    return;
+                }
+
+                var entrySelected = returnToRetainer
+                    ? await this.SelectContextMenuEntry(["收回给雇员"], ["Return to Retainer"])
+                    : await this.SelectContextMenuEntry(["收回给自己"], ["Return to Inventory", "Take Back"]);
+                if (!entrySelected)
+                {
+                    this.StatusMessage = $"右键菜单中没有“收回给{target}”选项（已收回 {retracted} 件）。";
+                    return;
+                }
+
+                // Wait until the listing actually disappears; if it does not
+                // (for example the inventory is full), abort instead of firing
+                // the same callback forever.
+                var removed = false;
+                for (var wait = 0; wait < 30; wait++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await Task.Delay(100, cancellationToken);
+                    if (await this.CountMarketItems() < remaining)
+                    {
+                        removed = true;
+                        break;
+                    }
+                }
+
+                if (!removed)
+                {
+                    this.StatusMessage = $"收回未生效，批量收回中止（已收回 {retracted} 件）；请检查背包或雇员的剩余空间。";
+                    return;
+                }
+
+                retracted++;
+                this.StatusMessage = $"已收回给{target} {retracted} 件……";
+                this.pluginLog.Information($"Batch retract: removed listing {retracted}, returnToRetainer={returnToRetainer}.");
+                await Task.Delay(300, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            this.StatusMessage = $"批量收回已取消（已收回 {retracted} 件）。";
+            this.pluginLog.Information("Batch retract cancelled.");
+        }
+        catch (Exception ex)
+        {
+            this.StatusMessage = $"批量收回失败（已收回 {retracted} 件），请查看日志。";
+            this.pluginLog.Error($"Batch retract failed: {ex}");
+        }
+        finally
+        {
+            this.IsRunning = false;
+        }
+    }
+
+    private Task<int> CountMarketItems()
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            unsafe
+            {
+                var container = this.inventoryService.GetInventoryContainer(InventoryType.RetainerMarket);
+                if (container == null || !container->IsLoaded)
+                {
+                    return 0;
+                }
+
+                var count = 0;
+                for (var index = 0; index < container->Size; index++)
+                {
+                    if (container->Items[index].ItemId != 0)
+                    {
+                        count++;
+                    }
+                }
+
+                return count;
+            }
+        });
+    }
+
+    private Task<bool> SelectListedItem(int rowIndex)
+    {
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName("RetainerSellList");
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AtkUnitBase*)pointer.Address;
+                if (!this.IsReady(addon))
+                {
+                    return false;
+                }
+
+                var values = stackalloc AtkValue[3];
+                values[0] = new AtkValue { Type = AtkValueType.Int, Int = 0 };
+                values[1] = new AtkValue { Type = AtkValueType.Int, Int = rowIndex };
+                values[2] = new AtkValue { Type = AtkValueType.Int, Int = 1 };
+                addon->FireCallback(3, values, true);
+                return true;
+            }
+        });
     }
 
     private Task<bool> HasFreeMarketSlot()
@@ -355,6 +521,16 @@ public sealed class AutoListingService : IHostedService, IDisposable
 
     private Task<bool> SelectPutUpForSale()
     {
+        return this.SelectContextMenuEntry(["到市场出售", "出售"], ["Put Up for Sale"]);
+    }
+
+    /// <summary>
+    /// Selects a ContextMenu entry, trying exact label matches first and then
+    /// case-insensitive substring matches, so short CN labels cannot
+    /// accidentally match longer unrelated entries.
+    /// </summary>
+    private Task<bool> SelectContextMenuEntry(string[] exactLabels, string[] fuzzyLabels)
+    {
         return this.framework.RunOnFrameworkThread(() =>
         {
             unsafe
@@ -377,33 +553,34 @@ public sealed class AutoListingService : IHostedService, IDisposable
                     return false;
                 }
 
-                var selectedIndex = -1;
                 var labels = new List<string>();
                 for (var index = 0; index < list->ListLength; index++)
                 {
                     try
                     {
-                        var text = list->GetItemLabel(index).ToString().Trim();
-                        labels.Add(text);
-                        if (text.Equals("到市场出售", StringComparison.Ordinal) ||
-                            text.Equals("出售", StringComparison.Ordinal) ||
-                            text.Contains("Put Up for Sale", StringComparison.OrdinalIgnoreCase))
-                        {
-                            selectedIndex = index;
-                            break;
-                        }
+                        labels.Add(list->GetItemLabel(index).ToString().Trim());
                     }
                     catch
                     {
                         // Context menu text can be invalid while the menu is
                         // being rebuilt; skip that entry safely.
+                        labels.Add(string.Empty);
                     }
+                }
+
+                var selectedIndex = labels.FindIndex(
+                    label => exactLabels.Any(exact => label.Equals(exact, StringComparison.Ordinal)));
+                if (selectedIndex < 0)
+                {
+                    selectedIndex = labels.FindIndex(
+                        label => label.Length > 0 &&
+                                 fuzzyLabels.Any(fuzzy => label.Contains(fuzzy, StringComparison.OrdinalIgnoreCase)));
                 }
 
                 if (selectedIndex < 0)
                 {
                     this.pluginLog.Warning(
-                        $"Batch listing: no put-up-for-sale entry in context menu; entries: {string.Join(" | ", labels)}.");
+                        $"Batch listing: no entry matching [{string.Join(", ", exactLabels)}] in context menu; entries: {string.Join(" | ", labels)}.");
                     addon->AtkUnitBase.Close(true);
                     return false;
                 }

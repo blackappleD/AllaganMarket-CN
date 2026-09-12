@@ -8,6 +8,14 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2013] - 2026-09-12
+
+### Added
+- Batch retract: the batch listing section gains "批量收回给雇员" and "批量收回给自己" buttons that pull every current listing back through the native context menu callbacks, aborting safely if a listing fails to disappear (for example when the target inventory is full).
+
+### Changed
+- The batch listing item picker now shows the total item quantity (e.g. "高密度轻铝矿 (999)") instead of the stack count, and the stack count input is no longer clamped by available stacks or free slots — the run simply finishes early when the inventory or the market slots run out.
+
 ## [1.4.0.2012] - 2026-09-12
 
 ### Added

@@ -309,57 +309,57 @@ public class RetainerSellListOverlayWindow : OverlayWindow
 
         var candidates = this.BuildInventoryCandidates();
         var freeSlots = this.CountFreeMarketSlots();
+        var listedCount = this.CountListedMarketItems();
+        var otherAutomationRunning = this.autoUndercutService.IsRunning;
 
         if (candidates.Count == 0)
         {
             ImGui.TextDisabled("背包中没有可上架的物品。");
-            return;
         }
-
-        var selectedIndex = candidates.FindIndex(
-            candidate => candidate.ItemId == this.batchListItemId && candidate.IsHq == this.batchListIsHq);
-        if (selectedIndex < 0)
+        else
         {
-            selectedIndex = 0;
-            this.batchListItemId = candidates[0].ItemId;
-            this.batchListIsHq = candidates[0].IsHq;
-            this.batchListStackCount = Math.Min(candidates[0].StackCount, Math.Max(freeSlots, 1));
-        }
-
-        ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
-        using (var combo = ImRaii.Combo("##batch-list-item", candidates[selectedIndex].Label))
-        {
-            if (combo)
+            var selectedIndex = candidates.FindIndex(
+                candidate => candidate.ItemId == this.batchListItemId && candidate.IsHq == this.batchListIsHq);
+            if (selectedIndex < 0)
             {
-                for (var index = 0; index < candidates.Count; index++)
+                selectedIndex = 0;
+                this.batchListItemId = candidates[0].ItemId;
+                this.batchListIsHq = candidates[0].IsHq;
+                this.batchListStackCount = candidates[0].StackCount;
+            }
+
+            ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
+            using (var combo = ImRaii.Combo("##batch-list-item", candidates[selectedIndex].Label))
+            {
+                if (combo)
                 {
-                    if (ImGui.Selectable(candidates[index].Label, index == selectedIndex))
+                    for (var index = 0; index < candidates.Count; index++)
                     {
-                        this.batchListItemId = candidates[index].ItemId;
-                        this.batchListIsHq = candidates[index].IsHq;
-                        this.batchListStackCount = Math.Min(candidates[index].StackCount, Math.Max(freeSlots, 1));
+                        if (ImGui.Selectable(candidates[index].Label, index == selectedIndex))
+                        {
+                            this.batchListItemId = candidates[index].ItemId;
+                            this.batchListIsHq = candidates[index].IsHq;
+                            this.batchListStackCount = candidates[index].StackCount;
+                        }
                     }
                 }
             }
-        }
 
-        var selected = candidates[selectedIndex];
-        var maxStacks = Math.Max(Math.Min(selected.StackCount, freeSlots), 1);
+            ImGui.SetNextItemWidth(120 * ImGui.GetIO().FontGlobalScale);
+            var stackCount = this.batchListStackCount;
+            if (ImGui.InputInt("组数##batch-list-count", ref stackCount))
+            {
+                this.batchListStackCount = Math.Clamp(stackCount, 1, 20);
+            }
 
-        ImGui.SetNextItemWidth(120 * ImGui.GetIO().FontGlobalScale);
-        var stackCount = this.batchListStackCount;
-        if (ImGui.InputInt("组数##batch-list-count", ref stackCount))
-        {
-            this.batchListStackCount = Math.Clamp(stackCount, 1, maxStacks);
-        }
+            ImGui.SameLine();
+            ImGui.TextDisabled($"剩余槽位：{freeSlots}");
 
-        ImGui.SameLine();
-        ImGui.TextDisabled($"剩余槽位：{freeSlots}");
-
-        ImGui.Checkbox("上架前查询一次市场时价##batch-list-refresh", ref this.batchListRefreshPrice);
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip("勾选后会在上架第一组时打开时价窗口获取推荐价格，其余各组复用该价格；不勾选则直接使用缓存的推荐价格。");
+            ImGui.Checkbox("上架前查询一次市场时价##batch-list-refresh", ref this.batchListRefreshPrice);
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip("勾选后会在上架第一组时打开时价窗口获取推荐价格，其余各组复用该价格；不勾选则直接使用缓存的推荐价格。");
+            }
         }
 
         if (this.autoListingService.IsRunning)
@@ -371,16 +371,30 @@ public class RetainerSellListOverlayWindow : OverlayWindow
         }
         else
         {
-            var otherAutomationRunning = this.autoUndercutService.IsRunning;
-            using (ImRaii.Disabled(freeSlots == 0 || otherAutomationRunning))
+            using (ImRaii.Disabled(candidates.Count == 0 || freeSlots == 0 || otherAutomationRunning))
             {
                 if (ImGui.Button("开始批量上架##batch-list-start"))
                 {
                     this.autoListingService.Start(
                         this.batchListItemId,
                         this.batchListIsHq,
-                        Math.Clamp(this.batchListStackCount, 1, maxStacks),
+                        this.batchListStackCount,
                         this.batchListRefreshPrice);
+                }
+            }
+
+            using (ImRaii.Disabled(listedCount == 0 || otherAutomationRunning))
+            {
+                if (ImGui.Button("批量收回给雇员##batch-retract-retainer"))
+                {
+                    this.autoListingService.StartRetractAll(true);
+                }
+
+                ImGui.SameLine();
+
+                if (ImGui.Button("批量收回给自己##batch-retract-self"))
+                {
+                    this.autoListingService.StartRetractAll(false);
                 }
             }
 
@@ -400,7 +414,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
 
     private unsafe List<(uint ItemId, bool IsHq, int StackCount, string Label)> BuildInventoryCandidates()
     {
-        var stacks = new Dictionary<(uint ItemId, bool IsHq), int>();
+        var stacks = new Dictionary<(uint ItemId, bool IsHq), (int StackCount, long Quantity)>();
         InventoryType[] playerInventories =
         [
             InventoryType.Inventory1,
@@ -432,7 +446,8 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                 }
 
                 var key = (item.ItemId, item.Flags.HasFlag(InventoryItem.ItemFlags.HighQuality));
-                stacks[key] = stacks.TryGetValue(key, out var count) ? count + 1 : 1;
+                var current = stacks.TryGetValue(key, out var existing) ? existing : (StackCount: 0, Quantity: 0L);
+                stacks[key] = (current.StackCount + 1, current.Quantity + item.Quantity);
             }
         }
 
@@ -440,11 +455,31 @@ public class RetainerSellListOverlayWindow : OverlayWindow
             .Select(pair =>
             {
                 var name = this.itemSheet.GetRowOrDefault(pair.Key.ItemId)?.Name.ExtractText() ?? this.localization.Get("Overlay.UnknownItem");
-                var label = $"{name}{(pair.Key.IsHq ? " (HQ)" : string.Empty)} ×{pair.Value}组";
-                return (pair.Key.ItemId, pair.Key.IsHq, StackCount: pair.Value, Label: label);
+                var label = $"{name}{(pair.Key.IsHq ? " (HQ)" : string.Empty)} ({pair.Value.Quantity})";
+                return (pair.Key.ItemId, pair.Key.IsHq, pair.Value.StackCount, Label: label);
             })
             .OrderBy(candidate => candidate.Label, StringComparer.Ordinal)
             .ToList();
+    }
+
+    private unsafe int CountListedMarketItems()
+    {
+        var container = this.inventoryService.GetInventoryContainer(InventoryType.RetainerMarket);
+        if (container == null || !container->IsLoaded)
+        {
+            return 0;
+        }
+
+        var listed = 0;
+        for (var index = 0; index < container->Size; index++)
+        {
+            if (container->Items[index].ItemId != 0)
+            {
+                listed++;
+            }
+        }
+
+        return listed;
     }
 
     private unsafe int CountFreeMarketSlots()
