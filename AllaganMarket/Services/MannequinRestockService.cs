@@ -27,6 +27,11 @@ public sealed class MannequinRestockService : IHostedService
 {
     private const string MannequinAddonNameValue = "MerchantSetting";
     private const long DiagnosticIntervalMilliseconds = 2000;
+    private const long CaptureRetryIntervalMilliseconds = 500;
+
+    // AgentMerchantSettingInfo availability value observed for sold-out slots
+    // (0 = empty, 1 = listed, 2 = sold out).
+    private const byte AvailabilitySoldOut = 2;
 
     private static readonly InventoryType[] PlayerInventoryTypes =
     [
@@ -48,6 +53,8 @@ public sealed class MannequinRestockService : IHostedService
     private readonly Dictionary<nint, string> lastAddonDiagnosticStates = [];
     private readonly Dictionary<nint, string> recentAddonDiagnostics = [];
     private long lastDiagnosticMilliseconds;
+    private long lastCaptureAttemptMilliseconds;
+    private string? lastCaptureSignature;
     private CancellationTokenSource? restockCancellationTokenSource;
     private List<RestockItemPlan>? restockExecution;
 
@@ -89,10 +96,6 @@ public sealed class MannequinRestockService : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        this.addonLifecycle.RegisterListener(AddonEvent.PostSetup, this.OnAddonLifecycleEvent);
-        this.addonLifecycle.RegisterListener(AddonEvent.PostShow, this.OnAddonLifecycleEvent);
-        this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, this.OnAddonLifecycleEvent);
-        this.addonLifecycle.RegisterListener(AddonEvent.PostDraw, this.OnAddonLifecycleEvent);
         this.addonLifecycle.RegisterListener(AddonEvent.PostSetup, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.RegisterListener(AddonEvent.PostDraw, MannequinAddonNameValue, this.OnAnyAddonChanged);
@@ -109,10 +112,6 @@ public sealed class MannequinRestockService : IHostedService
     {
         this.restockCancellationTokenSource?.Cancel();
         this.framework.Update -= this.OnFrameworkUpdate;
-        this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, this.OnAddonLifecycleEvent);
-        this.addonLifecycle.UnregisterListener(AddonEvent.PostShow, this.OnAddonLifecycleEvent);
-        this.addonLifecycle.UnregisterListener(AddonEvent.PostRefresh, this.OnAddonLifecycleEvent);
-        this.addonLifecycle.UnregisterListener(AddonEvent.PostDraw, this.OnAddonLifecycleEvent);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostRefresh, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostDraw, MannequinAddonNameValue, this.OnAnyAddonChanged);
@@ -176,20 +175,33 @@ public sealed class MannequinRestockService : IHostedService
 
     private async Task ExecuteRestockAsync(List<RestockItemPlan> execution, CancellationToken cancellationToken)
     {
+        var restockedCount = 0;
         try
         {
             foreach (var plan in execution)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var itemName = this.GetItemName(plan.Item.ItemId);
                 if (plan.Source == RestockItemSource.Missing)
                 {
                     this.pluginLog.Warning("[MannequinRestock] skipping slot={Slot}; item={ItemId}; source=missing.", plan.Item.EquipmentSlot, plan.Item.ItemId);
                     continue;
                 }
 
+                if (plan.Item.UnitPrice == 0)
+                {
+                    this.StatusMessage = $"跳过 {itemName}：售出前未记录价格，请手动上架一次以记录。";
+                    this.pluginLog.Warning(
+                        "[MannequinRestock] skipping slot={Slot}; item={ItemId}; reason=unknown-price.",
+                        plan.Item.EquipmentSlot,
+                        plan.Item.ItemId);
+                    this.StateChanged?.Invoke();
+                    continue;
+                }
+
                 if (plan.Source == RestockItemSource.RetainerInventory)
                 {
-                    this.StatusMessage = $"部位 {plan.Item.EquipmentSlot} 的装备在雇员中；请先在传唤铃打开该雇员并取出装备。";
+                    this.StatusMessage = $"{itemName} 在雇员中；请先在传唤铃打开该雇员并取出装备。";
                     this.pluginLog.Warning(
                         "[MannequinRestock] slot={Slot}; item={ItemId}; source=retainer; automatic bell withdrawal is not available in this build.",
                         plan.Item.EquipmentSlot,
@@ -198,17 +210,25 @@ public sealed class MannequinRestockService : IHostedService
                     continue;
                 }
 
-                this.StatusMessage = $"正在补货：部位 {plan.Item.EquipmentSlot}。";
+                this.StatusMessage = $"正在补货：{itemName}。";
                 this.StateChanged?.Invoke();
                 await this.RestockPlayerInventoryItemAsync(plan.Item, cancellationToken);
+                restockedCount++;
             }
 
-            this.StatusMessage = "补货流程已完成，请确认模特槽位状态。";
-            this.pluginLog.Information("[MannequinRestock] execution completed; items={Count}.", execution.Count);
+            this.StatusMessage = restockedCount > 0
+                ? $"补货完成：已重新上架 {restockedCount}/{execution.Count} 个装备。"
+                : "补货结束：没有可以重新上架的装备（缺失、价格未知或在雇员中）。";
+            this.pluginLog.Information(
+                "[MannequinRestock] execution completed; restocked={Restocked}; planned={Count}.",
+                restockedCount,
+                execution.Count);
             await Task.Delay(250, cancellationToken);
             if (this.IsMannequinWindowVisible)
             {
-                this.TryCaptureCurrentConfiguration();
+                // Agent memory and the configuration dictionary must only be
+                // touched on the framework thread.
+                await this.framework.RunOnFrameworkThread(() => this.TryCaptureCurrentConfiguration());
             }
         }
         catch (OperationCanceledException)
@@ -450,6 +470,7 @@ public sealed class MannequinRestockService : IHostedService
 
     private unsafe bool TryCaptureCurrentConfiguration()
     {
+        this.lastCaptureAttemptMilliseconds = Environment.TickCount64;
         try
         {
             var agentInfo = AgentMerchantSettingInfo.Instance();
@@ -460,48 +481,110 @@ public sealed class MannequinRestockService : IHostedService
             }
 
             var mannequinId = this.GetCurrentMannequinId();
+            this.configuration.MannequinConfigurations.TryGetValue(mannequinId, out var saved);
             var captured = new MannequinConfiguration
             {
                 MannequinId = mannequinId,
                 RetainerId = this.retainerService.RetainerId,
             };
 
+            var hasUnknownPrices = false;
             var itemIndex = 0;
             foreach (var item in agentInfo->ItemsSpan)
             {
-                this.pluginLog.Information(
-                    "[MannequinDiag] slot={Slot}; itemId={ItemId}; itemIdWithQuality={ItemIdWithQuality}; hq={HighQuality}; price={Price}; availability={Availability}; color1={Color1}; color2={Color2}.",
-                    itemIndex,
-                    item.ItemId,
-                    item.ItemIdWithQuality,
-                    item.IsHighQuality,
-                    item.Price,
-                    item.Availability,
-                    item.Color1,
-                    item.Color2);
-
                 if (item.ItemId != 0)
                 {
-                    captured.Items.Add(new MannequinItem
+                    var capturedItem = new MannequinItem
                     {
                         EquipmentSlot = itemIndex,
                         ItemId = item.ItemId,
                         IsHighQuality = item.IsHighQuality,
                         UnitPrice = item.Price > 0 ? (uint)Math.Min(item.Price, uint.MaxValue) : 0,
-                        IsSoldOut = item.Availability == 2,
-                    });
+                        IsSoldOut = item.Availability == AvailabilitySoldOut,
+                    };
+
+                    // Sold-out slots lose the HQ flag and the price in the agent data,
+                    // so restore them from the configuration saved while the item was listed.
+                    if (capturedItem.IsSoldOut)
+                    {
+                        var savedItem = saved?.Items.Find(
+                            existing => existing.EquipmentSlot == capturedItem.EquipmentSlot &&
+                                        existing.ItemId == capturedItem.ItemId);
+                        if (savedItem != null)
+                        {
+                            capturedItem.IsHighQuality = savedItem.IsHighQuality;
+                            capturedItem.UnitPrice = savedItem.UnitPrice;
+                        }
+
+                        if (capturedItem.UnitPrice == 0)
+                        {
+                            hasUnknownPrices = true;
+                        }
+                    }
+
+                    captured.Items.Add(capturedItem);
                 }
 
                 itemIndex++;
             }
 
+            var signature = $"{mannequinId};" + string.Join(
+                ",",
+                captured.Items.Select(item => $"{item.EquipmentSlot}:{item.ItemId}:{item.IsHighQuality}:{item.UnitPrice}:{item.IsSoldOut}"));
+            if (signature == this.lastCaptureSignature && this.CurrentConfiguration != null)
+            {
+                return captured.Items.Count > 0;
+            }
+
+            this.lastCaptureSignature = signature;
+            foreach (var item in captured.Items)
+            {
+                this.pluginLog.Information(
+                    "[MannequinDiag] slot={Slot}; itemId={ItemId}; hq={HighQuality}; price={Price}; soldOut={SoldOut}.",
+                    item.EquipmentSlot,
+                    item.ItemId,
+                    item.IsHighQuality,
+                    item.UnitPrice,
+                    item.IsSoldOut);
+            }
+
             this.CurrentConfiguration = captured;
-            this.StatusMessage = $"已读取模特配置：{captured.Items.Count}/12 个槽位。";
+            if (captured.Items.Count > 0 && mannequinId != 0 && !this.IsRestocking)
+            {
+                // Remember prices and HQ flags while items are still listed so
+                // sold-out slots can be restocked after the agent data loses them.
+                // Keep previously saved slots that are currently absent (e.g. an
+                // entry being replaced) so their price records survive. Items are
+                // cloned so the saved snapshot never aliases CurrentConfiguration.
+                var toSave = new MannequinConfiguration
+                {
+                    MannequinId = captured.MannequinId,
+                    RetainerId = captured.RetainerId,
+                    Items = captured.Items.Select(CloneItem).ToList(),
+                };
+                if (saved != null)
+                {
+                    toSave.Items.AddRange(
+                        saved.Items
+                            .Where(existing => captured.Items.All(current => current.EquipmentSlot != existing.EquipmentSlot))
+                            .Select(CloneItem));
+                }
+
+                this.configuration.MannequinConfigurations[mannequinId] = toSave;
+                this.configuration.IsDirty = true;
+            }
+
+            var soldOutCount = captured.Items.Count(item => item.IsSoldOut);
+            this.StatusMessage = captured.Items.Count == 0
+                ? "已读取模特配置：没有检测到装备。"
+                : hasUnknownPrices
+                    ? $"已读取模特配置：{captured.Items.Count} 个槽位，{soldOutCount} 个售罄；部分售罄装备价格未知（售出前未记录），将跳过。"
+                    : $"已读取模特配置：{captured.Items.Count} 个槽位，{soldOutCount} 个售罄。";
             this.pluginLog.Information(
-                "[MannequinDiag] captured mannequin configuration; mannequinId={MannequinId}; selectedItems=0x{SelectedItems:X8}; items={ItemCount}.",
+                "[MannequinDiag] captured mannequin configuration; mannequinId={MannequinId}; items={ItemCount}; soldOut={SoldOutCount}.",
                 captured.MannequinId,
-                agentInfo->SelectedItems,
-                captured.Items.Count);
+                captured.Items.Count,
+                soldOutCount);
             this.StateChanged?.Invoke();
             return captured.Items.Count > 0;
         }
@@ -515,6 +598,18 @@ public sealed class MannequinRestockService : IHostedService
     private ulong GetCurrentMannequinId()
     {
         return this.targetManager.Target?.GameObjectId ?? (ulong)this.MannequinAddonAddress;
+    }
+
+    private static MannequinItem CloneItem(MannequinItem item)
+    {
+        return new MannequinItem
+        {
+            EquipmentSlot = item.EquipmentSlot,
+            ItemId = item.ItemId,
+            IsHighQuality = item.IsHighQuality,
+            UnitPrice = item.UnitPrice,
+            IsSoldOut = item.IsSoldOut,
+        };
     }
 
     public void SaveConfiguration(MannequinConfiguration mannequinConfiguration)
@@ -550,17 +645,47 @@ public sealed class MannequinRestockService : IHostedService
     {
         return mannequinConfiguration.Items
             .Where(item => item.ItemId != 0 && item.IsSoldOut)
-            .Select(item => new RestockItemPlan(
-                item,
-                this.FindPlayerInventoryItem(item) != null
-                    ? RestockItemSource.PlayerInventory
-                    : this.FindRetainerInventoryItem(item) != null
-                        ? RestockItemSource.RetainerInventory
-                        : RestockItemSource.Missing))
+            .Select(item => new RestockItemPlan(item, this.ResolveRestockSource(item)))
             .ToArray();
     }
 
-    private unsafe InventoryItem* FindPlayerInventoryItem(MannequinItem item)
+    public string GetItemName(uint itemId)
+    {
+        return this.itemSheet.TryGetRow(itemId, out var item) ? item.Name.ToString() : $"物品 {itemId}";
+    }
+
+    private unsafe RestockItemSource ResolveRestockSource(MannequinItem item)
+    {
+        if (this.FindPlayerInventoryItem(item, true) != null)
+        {
+            return RestockItemSource.PlayerInventory;
+        }
+
+        if (this.FindRetainerInventoryItem(item, true) != null)
+        {
+            return RestockItemSource.RetainerInventory;
+        }
+
+        // Fall back to ignoring the HQ flag only when the slot data was fully
+        // recovered (price known); otherwise the item is skipped anyway and a
+        // wrong-quality match would just mislabel it as restockable.
+        if (item.UnitPrice != 0)
+        {
+            if (this.FindPlayerInventoryItem(item, false) != null)
+            {
+                return RestockItemSource.PlayerInventory;
+            }
+
+            if (this.FindRetainerInventoryItem(item, false) != null)
+            {
+                return RestockItemSource.RetainerInventory;
+            }
+        }
+
+        return RestockItemSource.Missing;
+    }
+
+    private unsafe InventoryItem* FindPlayerInventoryItem(MannequinItem item, bool matchQuality)
     {
         foreach (var inventoryType in PlayerInventoryTypes)
         {
@@ -574,7 +699,8 @@ public sealed class MannequinRestockService : IHostedService
             {
                 var inventoryItem = &container->Items[index];
                 if (inventoryItem->ItemId == item.ItemId &&
-                    inventoryItem->Flags.HasFlag(InventoryItem.ItemFlags.HighQuality) == item.IsHighQuality)
+                    (!matchQuality ||
+                     inventoryItem->Flags.HasFlag(InventoryItem.ItemFlags.HighQuality) == item.IsHighQuality))
                 {
                     return inventoryItem;
                 }
@@ -584,7 +710,7 @@ public sealed class MannequinRestockService : IHostedService
         return null;
     }
 
-    private unsafe InventoryItem* FindRetainerInventoryItem(MannequinItem item)
+    private unsafe InventoryItem* FindRetainerInventoryItem(MannequinItem item, bool matchQuality)
     {
         if (this.retainerService.RetainerId == 0)
         {
@@ -603,7 +729,8 @@ public sealed class MannequinRestockService : IHostedService
             {
                 var inventoryItem = &container->Items[index];
                 if (inventoryItem->ItemId == item.ItemId &&
-                    inventoryItem->Flags.HasFlag(InventoryItem.ItemFlags.HighQuality) == item.IsHighQuality)
+                    (!matchQuality ||
+                     inventoryItem->Flags.HasFlag(InventoryItem.ItemFlags.HighQuality) == item.IsHighQuality))
                 {
                     return inventoryItem;
                 }
@@ -633,6 +760,13 @@ public sealed class MannequinRestockService : IHostedService
                 this.StateChanged?.Invoke();
             }
 
+            if (type == AddonEvent.PostRefresh)
+            {
+                // The native window refreshes when its content changes (e.g. an
+                // item is removed or listed), so recapture the slot data.
+                this.TryCaptureCurrentConfiguration();
+            }
+
             if (type == AddonEvent.PostDraw)
             {
                 var addon = (AtkUnitBase*)args.Addon.Address;
@@ -651,47 +785,6 @@ public sealed class MannequinRestockService : IHostedService
     private void OnFrameworkUpdate(IFramework framework)
     {
         this.RefreshMannequinAddon();
-        if (Environment.TickCount64 - this.lastDiagnosticMilliseconds < DiagnosticIntervalMilliseconds)
-        {
-            return;
-        }
-
-        this.lastDiagnosticMilliseconds = Environment.TickCount64;
-        this.LogKnownMannequinState("poll");
-    }
-
-    private unsafe void OnAddonLifecycleEvent(AddonEvent type, AddonArgs args)
-    {
-        if (args.Addon == IntPtr.Zero)
-        {
-            return;
-        }
-
-        try
-        {
-            var addon = (AtkUnitBase*)args.Addon.Address;
-            if (addon == null)
-            {
-                return;
-            }
-
-            var addonName = addon->NameString;
-            var shouldReadText = type is AddonEvent.PostSetup or AddonEvent.PostShow ||
-                                 IsDiagnosticCandidate(addonName, string.Empty) ||
-                                 this.recentAddonDiagnostics.ContainsKey((nint)addon);
-            var text = shouldReadText ? GetNodeTextSummary(addon->RootNode) : "<text skipped>";
-            if (type == AddonEvent.PostDraw && !IsDiagnosticCandidate(addonName, text) &&
-                this.recentAddonDiagnostics.ContainsKey((nint)addon))
-            {
-                return;
-            }
-
-            this.LogAddonDiagnostic(type.ToString(), args.AddonName, addon, text, type == AddonEvent.PostDraw);
-        }
-        catch (Exception exception)
-        {
-            this.pluginLog.Error(exception, "[MannequinDiag] failed to inspect addon lifecycle event {Event}.", type);
-        }
     }
 
     private unsafe void LogKnownMannequinState(string source)
@@ -756,6 +849,7 @@ public sealed class MannequinRestockService : IHostedService
                 this.MannequinAddonAddress = IntPtr.Zero;
                 this.MannequinAddonName = null;
                 this.CurrentConfiguration = null;
+                this.lastCaptureSignature = null;
                 this.StatusMessage = "等待打开服装模特商店设定。";
                 this.StateChanged?.Invoke();
             }
@@ -765,7 +859,10 @@ public sealed class MannequinRestockService : IHostedService
 
         if (addonAddress.Address == this.MannequinAddonAddress && this.IsMannequinWindowVisible)
         {
-            if (this.CurrentConfiguration == null)
+            // The agent data can lag behind the addon for a few frames, so keep
+            // retrying until at least one slot is captured.
+            if ((this.CurrentConfiguration == null || this.CurrentConfiguration.Items.Count == 0) &&
+                Environment.TickCount64 - this.lastCaptureAttemptMilliseconds >= CaptureRetryIntervalMilliseconds)
             {
                 this.TryCaptureCurrentConfiguration();
             }
@@ -795,6 +892,7 @@ public sealed class MannequinRestockService : IHostedService
         this.MannequinAddonName = null;
         this.MannequinAddonAddress = IntPtr.Zero;
         this.CurrentConfiguration = null;
+        this.lastCaptureSignature = null;
         this.StatusMessage = "等待打开服装模特商店设定。";
         this.StateChanged?.Invoke();
     }
@@ -877,16 +975,6 @@ public sealed class MannequinRestockService : IHostedService
         }
 
         return false;
-    }
-
-    private static bool IsDiagnosticCandidate(string addonName, string text)
-    {
-        return addonName.Contains("Mannequin", StringComparison.OrdinalIgnoreCase) ||
-               addonName.Contains("Housing", StringComparison.OrdinalIgnoreCase) ||
-               text.Contains("服装", StringComparison.Ordinal) ||
-               text.Contains("模特", StringComparison.Ordinal) ||
-               text.Contains("商店", StringComparison.Ordinal) ||
-               text.Contains("Mannequin", StringComparison.OrdinalIgnoreCase);
     }
 
     private static unsafe string GetNodeTextSummary(AtkResNode* node)

@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Numerics;
 
-using AllaganMarket.Mediator;
 using AllaganMarket.Services;
 
 using DalaMock.Host.Mediator;
@@ -15,6 +14,8 @@ namespace AllaganMarket.Windows;
 
 public sealed class MannequinRestockWindow : ExtendedWindow
 {
+    private const float MaxWindowWidth = 320;
+
     private readonly MannequinRestockService restockService;
     private readonly IPluginLog pluginLog;
 
@@ -37,7 +38,11 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         this.pluginLog = pluginLog;
         this.IsOpen = true;
         this.RespectCloseHotkey = false;
-        this.Size = new Vector2(130, 32);
+        this.SizeConstraints = new WindowSizeConstraints
+        {
+            MinimumSize = new Vector2(150, 0),
+            MaximumSize = new Vector2(MaxWindowWidth, 600),
+        };
     }
 
     public override bool DrawConditions()
@@ -45,29 +50,39 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         return this.restockService.IsMannequinWindowVisible && base.DrawConditions();
     }
 
+    public override void PreDraw()
+    {
+        base.PreDraw();
+        this.UpdatePosition();
+    }
+
     public override void Draw()
     {
-        this.UpdatePosition();
-        this.Flags |= ImGuiWindowFlags.NoBackground;
-
         var configuration = this.restockService.CurrentConfiguration;
-        if (configuration == null || configuration.Items.Count == 0)
-        {
-            if (ImGui.Button("一键补货", new Vector2(120, 0)) && !this.restockService.IsRestocking)
-            {
-                this.restockService.BeginRestock();
-            }
+        var plan = configuration == null || configuration.Items.Count == 0
+            ? Array.Empty<RestockItemPlan>()
+            : this.restockService.BuildRestockPlan(configuration);
 
-            ImGui.TextWrapped(this.restockService.StatusMessage);
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.SetTooltip("点击后采集当前模特状态；如果已保存配置，将按配置执行补货。");
-            }
-            return;
+        var buttonLabel = this.restockService.IsRestocking
+            ? "补货执行中..."
+            : plan.Count > 0
+                ? $"一键补货 ({plan.Count})"
+                : "一键补货";
+        if (ImGui.Button(buttonLabel, new Vector2(150, 0)) && !this.restockService.IsRestocking)
+        {
+            this.restockService.BeginRestock();
         }
 
-        var plan = this.restockService.BuildRestockPlan(configuration);
-        ImGui.TextUnformatted($"售罄装备：{plan.Count}");
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                plan.Any(item => item.Source == RestockItemSource.Missing)
+                    ? "重新上架检测到的售罄装备；标记为“缺失”的装备不在背包或当前雇员中，将被跳过。"
+                    : "重新上架检测到的售罄装备。");
+        }
+
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + MaxWindowWidth - 20);
+        ImGui.TextWrapped(this.restockService.StatusMessage);
 
         foreach (var item in plan)
         {
@@ -77,23 +92,12 @@ public sealed class MannequinRestockWindow : ExtendedWindow
                 RestockItemSource.RetainerInventory => "雇员",
                 _ => "缺失",
             };
-            ImGui.TextWrapped($"部位 {item.Item.EquipmentSlot}：{source}，价格 {item.Item.UnitPrice}");
+            var price = item.Item.UnitPrice > 0 ? $"{item.Item.UnitPrice:N0}" : "未知";
+            var quality = item.Item.IsHighQuality ? " HQ" : string.Empty;
+            ImGui.TextWrapped($"{this.restockService.GetItemName(item.Item.ItemId)}{quality}：{source}，价格 {price}");
         }
 
-        ImGui.Spacing();
-        var buttonLabel = this.restockService.IsRestocking ? "补货执行中..." : "一键补货";
-        if (ImGui.Button(buttonLabel, new Vector2(-1, 0)) && !this.restockService.IsRestocking)
-        {
-            this.restockService.BeginRestock();
-        }
-
-        if (plan.Any(item => item.Source == RestockItemSource.Missing))
-        {
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.SetTooltip("部分装备不在背包或当前雇员中，无法补货。");
-            }
-        }
+        ImGui.PopTextWrapPos();
     }
 
     private unsafe void UpdatePosition()
@@ -108,9 +112,15 @@ public sealed class MannequinRestockWindow : ExtendedWindow
             var addon = (FFXIVClientStructs.FFXIV.Component.GUI.AtkUnitBase*)this.restockService.MannequinAddonAddress;
             if (addon != null && addon->IsVisible)
             {
-                this.Position = new Vector2(
-                    addon->X + addon->GetScaledWidth(true) - 142,
-                    addon->Y + addon->GetScaledHeight(true) - 44);
+                // Anchor the overlay's bottom-right corner near the addon's
+                // bottom-right corner so the list grows upward instead of
+                // extending past the bottom of the native window.
+                ImGui.SetNextWindowPos(
+                    new Vector2(
+                        addon->X + addon->GetScaledWidth(true) - 12,
+                        addon->Y + addon->GetScaledHeight(true) - 12),
+                    ImGuiCond.Always,
+                    new Vector2(1, 1));
             }
         }
         catch (Exception exception)

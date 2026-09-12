@@ -8,6 +8,18 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2016] - 2026-09-12
+
+### Fixed
+- Mannequin restock button is no longer clipped away when sold-out items are listed: the overlay previously forced a fixed 130x32 size, so everything after the first line (including the button) was cut off. The overlay now auto-sizes, anchors its bottom-right corner to the native window, and always draws the restock button first.
+- Sold-out mannequin slots are now restocked correctly: the game wipes the HQ flag and the price from sold-out slots in the MerchantSetting agent data, so the plugin now saves each mannequin's prices/HQ flags automatically while items are still listed and restores them when the slots show up as sold out. Items whose price was never recorded are skipped with a clear message instead of being listed at 0 gil.
+- Slot capture no longer latches an empty result when the agent data lags behind the window opening; it retries every 500ms until slots are read, and re-captures whenever the native window refreshes.
+- Inventory matching falls back to ignoring the HQ flag when the recorded quality is unavailable, instead of reporting the equipment as missing.
+
+### Changed
+- Restock overlay now shows item names (with HQ tag), source, and price per sold-out slot, and the completion message reports how many items were actually relisted.
+- Removed the global addon lifecycle diagnostics (every-addon PostDraw/PostRefresh logging and the 2-second poll), which were flooding dalamud.log; MerchantSetting-specific diagnostics and `/amdiag` remain.
+
 ## [1.4.0.2015] - 2026-09-12
 
 ### Fixed
