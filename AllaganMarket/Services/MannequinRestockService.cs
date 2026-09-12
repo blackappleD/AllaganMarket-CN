@@ -475,13 +475,14 @@ public sealed class MannequinRestockService : IHostedService
         // 3. Pick the item. Gear stored on the retainer only shows on the picker's
         //    retainer tab, so switch there first when that is where the item is;
         //    either way the other tab is retried before giving up.
-        if (source == RestockItemSource.RetainerInventory)
+        var preferRetainer = source == RestockItemSource.RetainerInventory;
+        if (preferRetainer)
         {
-            await this.TrySwitchEquipSelectSourceAsync(cancellationToken);
+            await this.TrySwitchEquipSelectSourceAsync(true, cancellationToken);
         }
 
         var callback = await this.FindEquipmentCallbackAsync(item, cancellationToken, 15);
-        if (callback < 0 && await this.TrySwitchEquipSelectSourceAsync(cancellationToken))
+        if (callback < 0 && await this.TrySwitchEquipSelectSourceAsync(!preferRetainer, cancellationToken))
         {
             callback = await this.FindEquipmentCallbackAsync(item, cancellationToken, 15);
         }
@@ -562,21 +563,72 @@ public sealed class MannequinRestockService : IHostedService
     }
 
     /// <summary>
-    /// Switches the equipment picker between the bag and the retainer inventory by
-    /// clicking its source tabs, so gear stored on the active retainer can be listed.
+    /// Switches the equipment picker between the bag (tab 0) and the retainer
+    /// inventory (tab 1). Like the sell-as-set checkbox, replaying the click event
+    /// alone does not drive the tabs — the selected state is set directly on both
+    /// radio buttons and the window is then notified so it reloads the list.
     /// </summary>
-    private async Task<bool> TrySwitchEquipSelectSourceAsync(CancellationToken cancellationToken)
+    private async Task<bool> TrySwitchEquipSelectSourceAsync(bool toRetainer, CancellationToken cancellationToken)
     {
-        var switched = await this.framework.RunOnFrameworkThread(
-            () => this.TryClickComponent("MerchantEquipSelect", ComponentType.RadioButton, 1));
+        var switched = await this.framework.RunOnFrameworkThread(() => this.SwitchEquipSelectSource(toRetainer));
         if (!switched)
         {
             return false;
         }
 
-        this.pluginLog.Information("[MannequinRestock] state=switch-equip-source; target=retainer.");
+        this.pluginLog.Information(
+            "[MannequinRestock] state=switch-equip-source; target={Target}.",
+            toRetainer ? "retainer" : "bag");
         await Task.Delay(PollIntervalMilliseconds * 3, cancellationToken);
         return true;
+    }
+
+    private unsafe bool SwitchEquipSelectSource(bool toRetainer)
+    {
+        var pointer = this.gameGui.GetAddonByName("MerchantEquipSelect");
+        if (pointer == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var addon = (AtkUnitBase*)pointer.Address;
+        if (!this.IsReady(addon))
+        {
+            return false;
+        }
+
+        var bagOrdinal = 0;
+        var bagNode = FindComponentNode(&addon->UldManager, ComponentType.RadioButton, ref bagOrdinal);
+        var retainerOrdinal = 1;
+        var retainerNode = FindComponentNode(&addon->UldManager, ComponentType.RadioButton, ref retainerOrdinal);
+        if (bagNode == null || retainerNode == null)
+        {
+            this.pluginLog.Warning(
+                "[MannequinRestock] picker source tabs not found; components: {Components}",
+                DescribeComponentTypes(&addon->UldManager));
+            return false;
+        }
+
+        var targetNode = toRetainer ? retainerNode : bagNode;
+        this.pluginLog.Information(
+            "[MannequinRestock] picker tab nodes bag={BagNode}/retainer={RetainerNode}; target events: {Events}",
+            bagNode->NodeId,
+            retainerNode->NodeId,
+            DescribeNodeEvents(addon, targetNode));
+
+        var bagRadio = (AtkComponentRadioButton*)bagNode->GetAsAtkComponentNode()->Component;
+        var retainerRadio = (AtkComponentRadioButton*)retainerNode->GetAsAtkComponentNode()->Component;
+        if (bagRadio != null)
+        {
+            bagRadio->IsSelected = !toRetainer;
+        }
+
+        if (retainerRadio != null)
+        {
+            retainerRadio->IsSelected = toRetainer;
+        }
+
+        return ClickNode(addon, targetNode);
     }
 
     /// <summary>

@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2031] - 2026-09-13
+
+### Fixed
+- Switching the equipment picker to the retainer tab now works: like the sell-as-set checkbox, the tabs ignore replayed click events, so the selected state is set directly on both radio buttons and the window is then notified to reload the list. The flow can also switch back to the bag tab as the fallback direction, and both tab nodes plus their registered events are logged for diagnosis if the tabs are ever restructured.
+
 ## [1.4.0.2030] - 2026-09-13
 
 ### Fixed
