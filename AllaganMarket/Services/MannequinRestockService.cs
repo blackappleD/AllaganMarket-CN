@@ -46,9 +46,6 @@ public sealed class MannequinRestockService : IHostedService
     private const int MerchantEquipSelectChooseCallback = 19;
     private const int RetainerSellConfirmCallback = 0;
 
-    // Event state flags a real mouse click carries; synthesized clicks copy them.
-    private const byte ClickEventStateFlags = 132;
-
     // Private-use glyph the game appends to HQ item names in list rows.
     private const char HighQualityGlyph = '';
 
@@ -789,7 +786,8 @@ public sealed class MannequinRestockService : IHostedService
             }
 
             var objectInfo = (AtkUldComponentInfo*)component->UldManager.Objects;
-            if (objectInfo != null && objectInfo->ComponentType == componentType)
+            if (objectInfo != null && objectInfo->ComponentType == componentType &&
+                node->NodeFlags.HasFlag(NodeFlags.Visible))
             {
                 if (remaining == 0)
                 {
@@ -883,12 +881,6 @@ public sealed class MannequinRestockService : IHostedService
 
     private static unsafe bool TryDispatchClick(AtkUnitBase* addon, AtkResNode* node)
     {
-        var stage = AtkStage.Instance();
-        if (stage == null)
-        {
-            return false;
-        }
-
         foreach (var eventType in new[] { AtkEventType.ButtonClick, AtkEventType.MouseClick })
         {
             for (var registered = node->AtkEventManager.Event; registered != null; registered = registered->NextEvent)
@@ -898,17 +890,11 @@ public sealed class MannequinRestockService : IHostedService
                     continue;
                 }
 
-                var atkEvent = new AtkEvent
-                {
-                    Listener = (AtkEventListener*)addon,
-                    Target = &stage->AtkEventTarget,
-                    Node = node,
-                    // 132 = the flag combination the game itself sets on a click event
-                    // that originates from the mouse (forced | has-node | is-dragging off).
-                    State = new AtkEventState { StateFlags = (AtkEventStateFlags)ClickEventStateFlags },
-                };
+                // Hand the node's own registered event object back to the window
+                // instead of fabricating one: the game filled in the listener and
+                // target, and component handlers reject events pointing elsewhere.
                 var eventData = default(AtkEventData);
-                addon->ReceiveEvent(eventType, (int)registered->Param, &atkEvent, &eventData);
+                addon->ReceiveEvent(eventType, (int)registered->Param, registered, &eventData);
                 return true;
             }
         }
