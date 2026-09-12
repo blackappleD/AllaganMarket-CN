@@ -350,17 +350,19 @@ public sealed class MannequinRestockService : IHostedService
                 execution.Count);
             this.StateChanged?.Invoke();
 
-            if (restockedCount > 0)
-            {
-                await this.FinishRestockAsync(cancellationToken);
-            }
-
             await Task.Delay(250, cancellationToken);
             if (this.IsMannequinWindowVisible)
             {
                 // Agent memory and the configuration dictionary must only be
                 // touched on the framework thread.
                 await this.framework.RunOnFrameworkThread(() => this.TryCaptureCurrentConfiguration());
+            }
+
+            // Last, because pressing 确定 closes the window, which cancels the
+            // run; with nothing awaited afterwards that cancel is a no-op.
+            if (restockedCount > 0)
+            {
+                await this.FinishRestockAsync(cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -399,8 +401,11 @@ public sealed class MannequinRestockService : IHostedService
 
         if (this.SellAsSetOnFinish && !await this.TryEnableSellAsSetAsync(cancellationToken))
         {
-            this.StatusMessage += " 未能自动勾选“只按整套出售”，请手动勾选。";
+            // Committing without the set-sale flag is exactly the loss this option
+            // exists to prevent, so leave the window open for the user instead.
+            this.StatusMessage += " 未能自动勾选“只按整套出售”，请手动勾选后点击确定。";
             this.StateChanged?.Invoke();
+            return;
         }
 
         if (this.ConfirmOnFinish)
@@ -638,7 +643,10 @@ public sealed class MannequinRestockService : IHostedService
 
         if (result == SellAsSetResult.NotFound)
         {
-            this.pluginLog.Warning("[MannequinRestock] could not find the sell-as-set checkbox.");
+            var components = await this.framework.RunOnFrameworkThread(this.DescribeMannequinComponents);
+            this.pluginLog.Warning(
+                "[MannequinRestock] could not find the sell-as-set checkbox; components: {Components}",
+                components);
             return false;
         }
 
@@ -704,7 +712,19 @@ public sealed class MannequinRestockService : IHostedService
         }
 
         var remaining = 0;
-        return FindComponentNode(addon->RootNode, ComponentType.CheckBox, ref remaining);
+        return FindComponentNode(&addon->UldManager, ComponentType.CheckBox, ref remaining);
+    }
+
+    private unsafe string DescribeMannequinComponents()
+    {
+        var pointer = this.gameGui.GetAddonByName(MannequinAddonNameValue);
+        if (pointer == IntPtr.Zero)
+        {
+            return "<no addon>";
+        }
+
+        var addon = (AtkUnitBase*)pointer.Address;
+        return this.IsReady(addon) ? DescribeComponentTypes(&addon->UldManager) : "<not ready>";
     }
 
     private unsafe SellAsSetResult TryTickSellAsSetCheckBox()
@@ -740,70 +760,91 @@ public sealed class MannequinRestockService : IHostedService
         }
 
         var remaining = ordinal;
-        var node = FindComponentNode(addon->RootNode, componentType, ref remaining);
+        var node = FindComponentNode(&addon->UldManager, componentType, ref remaining);
         return node != null && ClickNode(addon, node);
     }
 
-    private static unsafe AtkResNode* FindComponentNode(AtkResNode* root, ComponentType componentType, ref int remaining, int depth = 0)
+    private static unsafe AtkResNode* FindComponentNode(AtkUldManager* uldManager, ComponentType componentType, ref int remaining, int depth = 0)
     {
-        if (root == null || depth > MaxNodeDepth)
+        if (uldManager == null || depth > MaxNodeDepth)
         {
             return null;
         }
 
-        for (var node = root->ChildNode; node != null; node = node->NextSiblingNode)
+        // The uld manager lists every node it owns flat, including component
+        // nodes whose own content lives in their nested uld manager rather than
+        // the child chain, so scan the list and recurse into each component.
+        for (var index = 0; index < uldManager->NodeListCount; index++)
         {
-            if ((ushort)node->Type >= 1000)
+            var node = uldManager->NodeList[index];
+            if (node == null || (ushort)node->Type < 1000)
             {
-                var component = node->GetAsAtkComponentNode()->Component;
-                var objectInfo = component == null ? null : (AtkUldComponentInfo*)component->UldManager.Objects;
-                if (objectInfo != null && objectInfo->ComponentType == componentType)
-                {
-                    if (remaining == 0)
-                    {
-                        return node;
-                    }
-
-                    remaining--;
-                }
-
-                // Controls nested inside another component (tabs inside a header
-                // component, checkboxes inside a panel) only appear in the
-                // component's uld node list, not in the child chain.
-                if (component != null)
-                {
-                    var uldManager = component->UldManager;
-                    for (var index = 0; index < uldManager.NodeListCount; index++)
-                    {
-                        var uldNode = uldManager.NodeList[index];
-                        if (uldNode == null || (ushort)uldNode->Type < 1000)
-                        {
-                            continue;
-                        }
-
-                        var uldComponent = uldNode->GetAsAtkComponentNode()->Component;
-                        var uldInfo = uldComponent == null ? null : (AtkUldComponentInfo*)uldComponent->UldManager.Objects;
-                        if (uldInfo != null && uldInfo->ComponentType == componentType)
-                        {
-                            if (remaining == 0)
-                            {
-                                return uldNode;
-                            }
-
-                            remaining--;
-                        }
-                    }
-                }
+                continue;
             }
 
-            var descendant = FindComponentNode(node, componentType, ref remaining, depth + 1);
-            if (descendant != null)
+            var component = node->GetAsAtkComponentNode()->Component;
+            if (component == null)
             {
-                return descendant;
+                continue;
+            }
+
+            var objectInfo = (AtkUldComponentInfo*)component->UldManager.Objects;
+            if (objectInfo != null && objectInfo->ComponentType == componentType)
+            {
+                if (remaining == 0)
+                {
+                    return node;
+                }
+
+                remaining--;
+            }
+
+            var nested = FindComponentNode(&component->UldManager, componentType, ref remaining, depth + 1);
+            if (nested != null)
+            {
+                return nested;
             }
         }
 
         return null;
+    }
+
+    private static unsafe string DescribeComponentTypes(AtkUldManager* uldManager, int depth = 0)
+    {
+        if (uldManager == null || depth > MaxNodeDepth)
+        {
+            return string.Empty;
+        }
+
+        var types = new List<string>();
+        for (var index = 0; index < uldManager->NodeListCount; index++)
+        {
+            var node = uldManager->NodeList[index];
+            if (node == null || (ushort)node->Type < 1000)
+            {
+                continue;
+            }
+
+            var component = node->GetAsAtkComponentNode()->Component;
+            if (component == null)
+            {
+                continue;
+            }
+
+            var objectInfo = (AtkUldComponentInfo*)component->UldManager.Objects;
+            if (objectInfo != null)
+            {
+                types.Add($"{node->NodeId}:{objectInfo->ComponentType}");
+            }
+
+            var nested = DescribeComponentTypes(&component->UldManager, depth + 1);
+            if (nested.Length > 0)
+            {
+                types.Add($"[{nested}]");
+            }
+        }
+
+        return string.Join(",", types);
     }
 
     /// <summary>

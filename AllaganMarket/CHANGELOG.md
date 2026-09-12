@@ -8,6 +8,13 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2025] - 2026-09-13
+
+### Fixed
+- The sell-as-set checkbox is now located through the addon's flat uld node list (recursing into nested components) instead of the child-node tree, which never contained it — this is why the run always reported "未能自动勾选". If it still cannot be found, the log dumps every component in the window for diagnosis.
+- A failed sell-as-set no longer falls through to pressing 确定: committing without the set-sale flag is exactly the loss the option exists to prevent, so the window is left open with a message asking to tick it manually.
+- The closing steps run after the final state capture, so pressing 确定 (which closes the window) no longer overwrites the completion status with a spurious "补货流程已取消".
+
 ## [1.4.0.2024] - 2026-09-13
 
 ### Fixed
