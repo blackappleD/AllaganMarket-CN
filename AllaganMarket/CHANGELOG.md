@@ -8,6 +8,17 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2020] - 2026-09-13
+
+### Fixed
+- Equipment selection reported every item as missing even though it was visible in the picker: the node-id chain lookup searched the whole tree per id and never descended into component nodes' uld node lists, which is where list rows actually live. The lookup now walks the chain level by level (root id must match, each id resolved among direct children, component contents searched in the uld list), matching the reference implementation, so rows 4/41001+ are found.
+- Row matching is now HQ-aware: when the preset marks the item as HQ, only rows carrying the HQ glyph match (and vice versa), so the NQ copy of the same equipment is never listed by mistake.
+- Closing the equipment picker after a failure now uses the window's own close routine, since the picker ignores the generic cancel callback and used to stay open.
+- The retainer-tab/checkbox lookup also descends into component contents, so tabs nested inside a header component can be found.
+
+### Changed
+- When an item still cannot be located after all retries, the log now dumps the rows the picker actually shows, so a future layout change is diagnosable from the log alone.
+
 ## [1.4.0.2019] - 2026-09-13
 
 ### Fixed

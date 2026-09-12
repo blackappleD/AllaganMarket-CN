@@ -46,11 +46,11 @@ public sealed class MannequinRestockService : IHostedService
     private const int MerchantEquipSelectChooseCallback = 19;
     private const int RetainerSellConfirmCallback = 0;
 
-    // Generic "cancel/close" value the Atk dialogs accept as their only argument.
-    private const int CloseCallbackValue = -1;
-
     // Event state flags a real mouse click carries; synthesized clicks copy them.
     private const byte ClickEventStateFlags = 132;
+
+    // Private-use glyph the game appends to HQ item names in list rows.
+    private const char HighQualityGlyph = '';
 
     private const int MannequinSlotCount = 12;
 
@@ -583,8 +583,9 @@ public sealed class MannequinRestockService : IHostedService
                     var addon = (AtkUnitBase*)pointer.Address;
                     if (this.IsReady(addon))
                     {
-                        var value = new AtkValue { Type = AtkValueType.Int, Int = CloseCallbackValue };
-                        addon->FireCallback(1, &value, true);
+                        // Some windows (the equipment picker) ignore the generic -1
+                        // cancel value, so close the window directly.
+                        addon->Close(true);
                     }
                 }
             });
@@ -702,6 +703,34 @@ public sealed class MannequinRestockService : IHostedService
 
                     remaining--;
                 }
+
+                // Controls nested inside another component (tabs inside a header
+                // component, checkboxes inside a panel) only appear in the
+                // component's uld node list, not in the child chain.
+                if (component != null)
+                {
+                    var uldManager = component->UldManager;
+                    for (var index = 0; index < uldManager.NodeListCount; index++)
+                    {
+                        var uldNode = uldManager.NodeList[index];
+                        if (uldNode == null || (ushort)uldNode->Type < 1000)
+                        {
+                            continue;
+                        }
+
+                        var uldComponent = uldNode->GetAsAtkComponentNode()->Component;
+                        var uldInfo = uldComponent == null ? null : (AtkUldComponentInfo*)uldComponent->UldManager.Objects;
+                        if (uldInfo != null && uldInfo->ComponentType == componentType)
+                        {
+                            if (remaining == 0)
+                            {
+                                return uldNode;
+                            }
+
+                            remaining--;
+                        }
+                    }
+                }
             }
 
             var descendant = FindComponentNode(node, componentType, ref remaining, depth + 1);
@@ -807,7 +836,58 @@ public sealed class MannequinRestockService : IHostedService
             await Task.Delay(100, cancellationToken);
         }
 
+        // Dump what the picker actually shows so a layout change is diagnosable
+        // from the log instead of just reporting "not found".
+        var listing = await this.framework.RunOnFrameworkThread(this.DescribeEquipSelectRows);
+        this.pluginLog.Warning(
+            "[MannequinRestock] item {ItemId} ({ItemName}, hq={Hq}) not found in MerchantEquipSelect; rows: {Rows}",
+            item.ItemId,
+            this.GetItemName(item.ItemId),
+            item.IsHighQuality,
+            listing);
         return -1;
+    }
+
+    private unsafe string DescribeEquipSelectRows()
+    {
+        var pointer = this.gameGui.GetAddonByName("MerchantEquipSelect");
+        if (pointer == IntPtr.Zero)
+        {
+            return "<no addon>";
+        }
+
+        var addon = (AtkUnitBase*)pointer.Address;
+        if (!this.IsReady(addon) || addon->RootNode == null)
+        {
+            return "<not ready>";
+        }
+
+        var rows = new List<string>();
+        foreach (var nodeIndex in EnumerateEquipSelectRowIds())
+        {
+            var node = GetNodeByIdChain(addon->RootNode, 1, 8, 13, nodeIndex, 3);
+            if (node == null || node->Type != NodeType.Text)
+            {
+                continue;
+            }
+
+            var text = node->GetAsAtkTextNode()->NodeText.ToString().Trim();
+            if (text.Length > 0)
+            {
+                rows.Add($"{nodeIndex}:{text}");
+            }
+        }
+
+        return rows.Count == 0 ? GetNodeTextSummary(addon->RootNode) : string.Join(" | ", rows);
+    }
+
+    private static IEnumerable<int> EnumerateEquipSelectRowIds()
+    {
+        yield return 4;
+        for (var index = 41001; index < 41051; index++)
+        {
+            yield return index;
+        }
     }
 
     private unsafe int FindEquipmentCallback(MannequinItem item)
@@ -824,13 +904,13 @@ public sealed class MannequinRestockService : IHostedService
             return -1;
         }
 
-        var nodes = new List<int> { 4 };
-        for (var index = 41001; index < 41051; index++)
+        if (!this.itemSheet.TryGetRow(item.ItemId, out var sheetItem))
         {
-            nodes.Add(index);
+            return -1;
         }
 
-        foreach (var nodeIndex in nodes)
+        var itemName = sheetItem.Name.ToString();
+        foreach (var nodeIndex in EnumerateEquipSelectRowIds())
         {
             var node = GetNodeByIdChain(addon->RootNode, 1, 8, 13, nodeIndex, 3);
             if (node == null || node->Type != NodeType.Text)
@@ -838,8 +918,16 @@ public sealed class MannequinRestockService : IHostedService
                 continue;
             }
 
-            var text = node->GetAsAtkTextNode()->NodeText.ToString();
-            if (!this.itemSheet.TryGetRow(item.ItemId, out var sheetItem) || !text.Contains(sheetItem.Name.ToString(), StringComparison.Ordinal))
+            var text = node->GetAsAtkTextNode()->NodeText.ToString().Trim();
+            if (!text.Contains(itemName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // HQ rows carry the HQ glyph after the name; when the preset knows the
+            // quality, require it to match so the NQ copy is never listed instead.
+            var rowIsHq = text.Contains(HighQualityGlyph);
+            if (rowIsHq != item.IsHighQuality)
             {
                 continue;
             }
@@ -936,12 +1024,23 @@ public sealed class MannequinRestockService : IHostedService
         return pointer != IntPtr.Zero && this.IsReady((AtkUnitBase*)pointer.Address);
     }
 
+    /// <summary>
+    /// Resolves a node by walking an id chain level by level: the root must carry the
+    /// first id, and each following id is looked up among the previous node's direct
+    /// children. Rows of list components live in the component's uld node list rather
+    /// than the child chain, so component contents are searched there.
+    /// </summary>
     private static unsafe AtkResNode* GetNodeByIdChain(AtkResNode* root, params int[] ids)
     {
-        var current = root;
-        foreach (var id in ids)
+        if (root == null || ids.Length == 0 || root->NodeId != (uint)ids[0])
         {
-            current = FindChildById(current, (uint)id);
+            return null;
+        }
+
+        var current = root;
+        for (var index = 1; index < ids.Length; index++)
+        {
+            current = FindDirectChildById(current, (uint)ids[index]);
             if (current == null)
             {
                 return null;
@@ -951,24 +1050,42 @@ public sealed class MannequinRestockService : IHostedService
         return current;
     }
 
-    private static unsafe AtkResNode* FindChildById(AtkResNode* root, uint id, int depth = 0)
+    private static unsafe AtkResNode* FindDirectChildById(AtkResNode* parent, uint id)
     {
-        if (root == null || depth > MaxNodeDepth)
-        {
-            return null;
-        }
-
-        for (var node = root->ChildNode; node != null; node = node->NextSiblingNode)
+        // ChildNode points into the sibling chain at an arbitrary end depending on
+        // how the node was built, so walk both directions from it.
+        for (var node = parent->ChildNode; node != null; node = node->PrevSiblingNode)
         {
             if (node->NodeId == id)
             {
                 return node;
             }
+        }
 
-            var descendant = FindChildById(node, id, depth + 1);
-            if (descendant != null)
+        for (var node = parent->ChildNode; node != null; node = node->NextSiblingNode)
+        {
+            if (node->NodeId == id)
             {
-                return descendant;
+                return node;
+            }
+        }
+
+        // Component nodes (lists, list item renderers, buttons) keep their content
+        // in the uld manager instead of the child chain.
+        if ((ushort)parent->Type >= 1000)
+        {
+            var component = parent->GetAsAtkComponentNode()->Component;
+            if (component != null)
+            {
+                var uldManager = component->UldManager;
+                for (var index = 0; index < uldManager.NodeListCount; index++)
+                {
+                    var node = uldManager.NodeList[index];
+                    if (node != null && node->NodeId == id)
+                    {
+                        return node;
+                    }
+                }
             }
         }
 
