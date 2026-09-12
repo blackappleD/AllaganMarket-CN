@@ -1387,6 +1387,13 @@ public sealed class MannequinRestockService : IHostedService
                 itemIndex++;
             }
 
+            // The agent memory does not update in real time when items are taken
+            // down manually through the native window (only a commit or reopen
+            // refreshes it), but the window itself is always current — so slots
+            // the agent claims are listed while the window no longer shows their
+            // item are downgraded to needing restock.
+            this.ApplyNativeWindowCrossCheck(captured, saved, ref hasUnknownPrices);
+
             var signature = $"{mannequinId};" + string.Join(
                 ",",
                 captured.Items.Select(item => $"{item.EquipmentSlot}:{item.ItemId}:{item.IsHighQuality}:{item.UnitPrice}:{item.IsSoldOut}"));
@@ -1491,6 +1498,81 @@ public sealed class MannequinRestockService : IHostedService
         item.IsHighQuality = isHighQuality;
         this.PersistConfiguration(current);
         this.StateChanged?.Invoke();
+    }
+
+    private unsafe void ApplyNativeWindowCrossCheck(
+        MannequinConfiguration captured,
+        MannequinConfiguration? saved,
+        ref bool hasUnknownPrices)
+    {
+        var addon = (AtkUnitBase*)this.MannequinAddonAddress;
+        if (addon == null || !this.IsReady(addon) || addon->RootNode == null)
+        {
+            return;
+        }
+
+        var texts = new List<string>();
+        CollectNodeTextRaw(addon->RootNode, texts, 0);
+
+        // Occurrences are counted per name because identical items can occupy
+        // several slots (e.g. two rings); when the window shows fewer copies
+        // than the agent claims are listed, the surplus slots are empty.
+        foreach (var group in captured.Items.Where(item => !item.IsSoldOut).GroupBy(item => this.GetItemName(item.ItemId)).ToList())
+        {
+            if (string.IsNullOrEmpty(group.Key))
+            {
+                continue;
+            }
+
+            var occurrences = texts.Count(text => text.Contains(group.Key, StringComparison.Ordinal));
+            var missing = group.Count() - occurrences;
+            if (missing <= 0)
+            {
+                continue;
+            }
+
+            foreach (var item in group.OrderByDescending(entry => entry.EquipmentSlot).Take(missing))
+            {
+                item.IsSoldOut = true;
+                if (item.UnitPrice == 0)
+                {
+                    var savedItem = saved?.Items.Find(
+                        existing => existing.EquipmentSlot == item.EquipmentSlot && existing.ItemId == item.ItemId);
+                    if (savedItem != null)
+                    {
+                        item.IsHighQuality = savedItem.IsHighQuality;
+                        item.UnitPrice = savedItem.UnitPrice;
+                    }
+
+                    if (item.UnitPrice == 0)
+                    {
+                        hasUnknownPrices = true;
+                    }
+                }
+            }
+        }
+    }
+
+    private static unsafe void CollectNodeTextRaw(AtkResNode* node, List<string> texts, int depth)
+    {
+        if (node == null || depth > MaxNodeDepth || texts.Count >= 96)
+        {
+            return;
+        }
+
+        if (node->Type == NodeType.Text && node->NodeFlags.HasFlag(NodeFlags.Visible))
+        {
+            var text = node->GetAsAtkTextNode()->NodeText.ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                texts.Add(text.Length > 80 ? text[..80] : text);
+            }
+        }
+
+        for (var child = node->ChildNode; child != null; child = child->NextSiblingNode)
+        {
+            CollectNodeTextRaw(child, texts, depth + 1);
+        }
     }
 
     private void PersistConfiguration(MannequinConfiguration current)
@@ -1781,9 +1863,11 @@ public sealed class MannequinRestockService : IHostedService
 
         if (addonAddress.Address == this.MannequinAddonAddress && this.IsMannequinWindowVisible)
         {
-            // The agent data can lag behind the addon for a few frames, so keep
-            // retrying until at least one slot is captured.
-            if ((this.CurrentConfiguration == null || this.CurrentConfiguration.Items.Count == 0) &&
+            // Recapture periodically while the window is open: the agent data can
+            // lag the addon on open, and manual take-downs only show up through
+            // the native-window cross-check. The capture signature keeps an
+            // unchanged state from causing any downstream work.
+            if (!this.IsRestocking &&
                 Environment.TickCount64 - this.lastCaptureAttemptMilliseconds >= CaptureRetryIntervalMilliseconds)
             {
                 this.TryCaptureCurrentConfiguration();

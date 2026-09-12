@@ -8,6 +8,12 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2028] - 2026-09-13
+
+### Fixed
+- Manually taking items down no longer leaves the panel stuck on "在售" until the window is committed and reopened: the agent memory does not update in real time for manual take-downs, so each capture now cross-checks against the live native window text — slots the agent claims are listed while the window no longer shows their item are downgraded to needing restock (occurrences are counted per item name, so duplicate items across slots are handled).
+- The panel recaptures every 500ms while the shop window is open instead of only while it is empty, so state changes surface without reopening; an unchanged capture signature keeps this free of log spam and UI churn.
+
 ## [1.4.0.2027] - 2026-09-13
 
 ### Fixed
