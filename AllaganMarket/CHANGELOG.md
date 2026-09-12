@@ -8,6 +8,15 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2018] - 2026-09-13
+
+### Added
+- Mannequin restock preset panel: the overlay is now a collapsible panel attached beside the MerchantSetting window showing every slot with its item icon, name, an editable unit price and HQ toggle, and a colored status (在售 / 可补货 / 在雇员 / 缺装备 / 缺价格). Prices and HQ flags edited in the panel are saved per mannequin and used by one-click restock, so fully sold-out mannequins whose prices were never captured can now be restocked after filling in prices once.
+- Prices are still learned automatically whenever items are seen listed; manual edits and learned prices share the same per-mannequin preset storage.
+
+### Changed
+- The restock button shows how many sold-out items are actually actionable (e.g. "一键补货 (8/10)"). Preset editing is disabled while a restock run is executing to protect the saved snapshot, and the panel clamps to the screen edges (falls back to the left side / shifts up when there is no room).
+
 ## [1.4.0.2017] - 2026-09-13
 
 ### Fixed

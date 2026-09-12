@@ -560,29 +560,11 @@ public sealed class MannequinRestockService : IHostedService
             }
 
             this.CurrentConfiguration = captured;
-            if (captured.Items.Count > 0 && mannequinId != 0 && !this.IsRestocking)
+            if (!this.IsRestocking)
             {
                 // Remember prices and HQ flags while items are still listed so
                 // sold-out slots can be restocked after the agent data loses them.
-                // Keep previously saved slots that are currently absent (e.g. an
-                // entry being replaced) so their price records survive. Items are
-                // cloned so the saved snapshot never aliases CurrentConfiguration.
-                var toSave = new MannequinConfiguration
-                {
-                    MannequinId = captured.MannequinId,
-                    RetainerId = captured.RetainerId,
-                    Items = captured.Items.Select(CloneItem).ToList(),
-                };
-                if (saved != null)
-                {
-                    toSave.Items.AddRange(
-                        saved.Items
-                            .Where(existing => captured.Items.All(current => current.EquipmentSlot != existing.EquipmentSlot))
-                            .Select(CloneItem));
-                }
-
-                this.configuration.MannequinConfigurations[mannequinId] = toSave;
-                this.configuration.IsDirty = true;
+                this.PersistConfiguration(captured);
             }
 
             var soldOutCount = captured.Items.Count(item => item.IsSoldOut);
@@ -636,6 +618,59 @@ public sealed class MannequinRestockService : IHostedService
         this.StateChanged?.Invoke();
     }
 
+    public void UpdatePresetItem(int equipmentSlot, uint unitPrice, bool isHighQuality)
+    {
+        if (this.IsRestocking)
+        {
+            // CurrentConfiguration can hold transient state mid-restock;
+            // persisting it would overwrite the saved snapshot for all slots.
+            this.pluginLog.Debug("[MannequinRestock] ignoring preset edit while restocking; slot={Slot}.", equipmentSlot);
+            return;
+        }
+
+        var current = this.CurrentConfiguration;
+        var item = current?.Items.Find(existing => existing.EquipmentSlot == equipmentSlot);
+        if (current == null || item == null)
+        {
+            this.pluginLog.Debug("[MannequinRestock] preset edit dropped; slot={Slot} not found in current configuration.", equipmentSlot);
+            return;
+        }
+
+        item.UnitPrice = unitPrice;
+        item.IsHighQuality = isHighQuality;
+        this.PersistConfiguration(current);
+        this.StateChanged?.Invoke();
+    }
+
+    private void PersistConfiguration(MannequinConfiguration current)
+    {
+        if (current.MannequinId == 0 || current.Items.Count == 0)
+        {
+            return;
+        }
+
+        // Keep previously saved slots that are currently absent (e.g. an entry
+        // being replaced) so their price records survive. Items are cloned so
+        // the saved snapshot never aliases CurrentConfiguration.
+        this.configuration.MannequinConfigurations.TryGetValue(current.MannequinId, out var saved);
+        var toSave = new MannequinConfiguration
+        {
+            MannequinId = current.MannequinId,
+            RetainerId = current.RetainerId,
+            Items = current.Items.Select(CloneItem).ToList(),
+        };
+        if (saved != null)
+        {
+            toSave.Items.AddRange(
+                saved.Items
+                    .Where(existing => current.Items.All(item => item.EquipmentSlot != existing.EquipmentSlot))
+                    .Select(CloneItem));
+        }
+
+        this.configuration.MannequinConfigurations[current.MannequinId] = toSave;
+        this.configuration.IsDirty = true;
+    }
+
     public void DumpDiagnostics()
     {
         this.pluginLog.Information(
@@ -678,7 +713,7 @@ public sealed class MannequinRestockService : IHostedService
         return false;
     }
 
-    private unsafe RestockItemSource ResolveRestockSource(MannequinItem item)
+    public unsafe RestockItemSource ResolveRestockSource(MannequinItem item)
     {
         if (this.FindPlayerInventoryItem(item, true) != null)
         {
