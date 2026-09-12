@@ -627,26 +627,62 @@ public sealed class MannequinRestockService : IHostedService
             }
         }
 
-        this.pluginLog.Information("[MannequinRestock] state=sell-as-set-enabled.");
-        return true;
+        // Trust the checkbox itself, not the click: only report success once the
+        // game shows the box as ticked.
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await this.framework.RunOnFrameworkThread(() => this.ReadSellAsSetCheckBox() == true))
+            {
+                this.pluginLog.Information("[MannequinRestock] state=sell-as-set-enabled.");
+                return true;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        this.pluginLog.Warning("[MannequinRestock] the sell-as-set checkbox is still unticked after clicking it.");
+        return false;
+    }
+
+    /// <summary>
+    /// Reads the sell-as-set checkbox state without clicking anything.
+    /// Null when the checkbox cannot be located.
+    /// </summary>
+    private unsafe bool? ReadSellAsSetCheckBox()
+    {
+        var node = this.FindSellAsSetCheckBoxNode(out var addon);
+        if (node == null)
+        {
+            return null;
+        }
+
+        var checkBox = (AtkComponentCheckBox*)node->GetAsAtkComponentNode()->Component;
+        return checkBox != null && checkBox->IsChecked;
+    }
+
+    private unsafe AtkResNode* FindSellAsSetCheckBoxNode(out AtkUnitBase* addon)
+    {
+        addon = null;
+        var pointer = this.gameGui.GetAddonByName(MannequinAddonNameValue);
+        if (pointer == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        addon = (AtkUnitBase*)pointer.Address;
+        if (!this.IsReady(addon) || addon->RootNode == null)
+        {
+            return null;
+        }
+
+        var remaining = 0;
+        return FindComponentNode(addon->RootNode, ComponentType.CheckBox, ref remaining);
     }
 
     private unsafe SellAsSetResult TryTickSellAsSetCheckBox()
     {
-        var pointer = this.gameGui.GetAddonByName(MannequinAddonNameValue);
-        if (pointer == IntPtr.Zero)
-        {
-            return SellAsSetResult.NotFound;
-        }
-
-        var addon = (AtkUnitBase*)pointer.Address;
-        if (!this.IsReady(addon) || addon->RootNode == null)
-        {
-            return SellAsSetResult.NotFound;
-        }
-
-        var remaining = 0;
-        var node = FindComponentNode(addon->RootNode, ComponentType.CheckBox, ref remaining);
+        var node = this.FindSellAsSetCheckBoxNode(out var addon);
         if (node == null)
         {
             return SellAsSetResult.NotFound;
@@ -744,10 +780,40 @@ public sealed class MannequinRestockService : IHostedService
     }
 
     /// <summary>
-    /// Dispatches a synthesized mouse click at a component node, for controls whose
-    /// addon callback id is unknown (the sell-as-set checkbox, the picker tabs).
+    /// Dispatches a synthesized click at a component node, for controls whose addon
+    /// callback id is unknown (the sell-as-set checkbox, the picker tabs). Components
+    /// register their handler as ButtonClick, plain nodes as MouseClick, and either
+    /// may live on a collision node inside the component rather than the component
+    /// node itself, so both the node and its component children are tried.
     /// </summary>
     private static unsafe bool ClickNode(AtkUnitBase* addon, AtkResNode* node)
+    {
+        if (TryDispatchClick(addon, node))
+        {
+            return true;
+        }
+
+        if ((ushort)node->Type >= 1000)
+        {
+            var component = node->GetAsAtkComponentNode()->Component;
+            if (component != null)
+            {
+                var uldManager = component->UldManager;
+                for (var index = 0; index < uldManager.NodeListCount; index++)
+                {
+                    var child = uldManager.NodeList[index];
+                    if (child != null && TryDispatchClick(addon, child))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static unsafe bool TryDispatchClick(AtkUnitBase* addon, AtkResNode* node)
     {
         var stage = AtkStage.Instance();
         if (stage == null)
@@ -755,25 +821,28 @@ public sealed class MannequinRestockService : IHostedService
             return false;
         }
 
-        for (var registered = node->AtkEventManager.Event; registered != null; registered = registered->NextEvent)
+        foreach (var eventType in new[] { AtkEventType.ButtonClick, AtkEventType.MouseClick })
         {
-            if (registered->State.EventType != AtkEventType.MouseClick)
+            for (var registered = node->AtkEventManager.Event; registered != null; registered = registered->NextEvent)
             {
-                continue;
-            }
+                if (registered->State.EventType != eventType)
+                {
+                    continue;
+                }
 
-            var atkEvent = new AtkEvent
-            {
-                Listener = (AtkEventListener*)addon,
-                Target = &stage->AtkEventTarget,
-                Node = node,
-                // 132 = the flag combination the game itself sets on a click event
-                // that originates from the mouse (forced | has-node | is-dragging off).
-                State = new AtkEventState { StateFlags = (AtkEventStateFlags)ClickEventStateFlags },
-            };
-            var eventData = default(AtkEventData);
-            addon->ReceiveEvent(AtkEventType.MouseClick, (int)registered->Param, &atkEvent, &eventData);
-            return true;
+                var atkEvent = new AtkEvent
+                {
+                    Listener = (AtkEventListener*)addon,
+                    Target = &stage->AtkEventTarget,
+                    Node = node,
+                    // 132 = the flag combination the game itself sets on a click event
+                    // that originates from the mouse (forced | has-node | is-dragging off).
+                    State = new AtkEventState { StateFlags = (AtkEventStateFlags)ClickEventStateFlags },
+                };
+                var eventData = default(AtkEventData);
+                addon->ReceiveEvent(eventType, (int)registered->Param, &atkEvent, &eventData);
+                return true;
+            }
         }
 
         return false;
@@ -1340,17 +1409,14 @@ public sealed class MannequinRestockService : IHostedService
         return this.itemSheet.TryGetRow(itemId, out var item) ? item.Name.ToString() : $"物品 {itemId}";
     }
 
-    public bool IsOverlayObstructed()
+    /// <summary>
+    /// Whether the native equipment picker is open. It docks against the shop
+    /// window's right edge, exactly where the preset panel sits, so the panel
+    /// moves to the left side while it is visible.
+    /// </summary>
+    public bool IsEquipmentPickerVisible()
     {
-        foreach (var addonName in OverlayObstructingAddons)
-        {
-            if (this.IsAddonReadyOnFrameworkThread(addonName))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return this.IsAddonReadyOnFrameworkThread("MerchantEquipSelect");
     }
 
     public unsafe RestockItemSource ResolveRestockSource(MannequinItem item)

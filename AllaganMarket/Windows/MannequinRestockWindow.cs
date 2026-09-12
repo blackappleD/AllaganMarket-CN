@@ -1,12 +1,14 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Numerics;
 
 using AllaganMarket.Services;
 
 using DalaMock.Host.Mediator;
+using DalaMock.Shared.Interfaces;
 
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Utility.Raii;
@@ -29,6 +31,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
     private readonly ITextureProvider textureProvider;
     private readonly ExcelSheet<Item> itemSheet;
     private readonly IPluginLog pluginLog;
+    private readonly IFont font;
     private Vector2 lastWindowSize;
 
     public MannequinRestockWindow(
@@ -38,7 +41,8 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         Configuration configuration,
         ITextureProvider textureProvider,
         ExcelSheet<Item> itemSheet,
-        IPluginLog pluginLog)
+        IPluginLog pluginLog,
+        IFont font)
         : base(
             mediator,
             imGuiService,
@@ -54,6 +58,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         this.textureProvider = textureProvider;
         this.itemSheet = itemSheet;
         this.pluginLog = pluginLog;
+        this.font = font;
         this.IsOpen = true;
         this.RespectCloseHotkey = false;
     }
@@ -144,6 +149,25 @@ public sealed class MannequinRestockWindow : ExtendedWindow
 
     private void DrawHeader(int soldOutCount, int actionableCount)
     {
+        // Same collapse control as the retainer list overlay: a lone chevron
+        // icon button, pointing right while collapsed and left while expanded.
+        var currentCursorPosX = ImGui.GetCursorPosX();
+        if (this.IsCollapsed)
+        {
+            if (ImGuiService.DrawIconButton(this.font, FontAwesomeIcon.ChevronRight, ref currentCursorPosX, "展开补货预设"))
+            {
+                this.IsCollapsed = false;
+            }
+
+            return;
+        }
+
+        if (ImGuiService.DrawIconButton(this.font, FontAwesomeIcon.ChevronLeft, ref currentCursorPosX, "收起补货预设"))
+        {
+            this.IsCollapsed = true;
+        }
+
+        ImGui.SameLine();
         var buttonLabel = this.restockService.IsRestocking
             ? "补货执行中..."
             : soldOutCount > 0
@@ -160,12 +184,6 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         if (ImGui.IsItemHovered())
         {
             ImGui.SetTooltip("重新上架已售罄的装备（需要装备在背包中且已设置价格）。");
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button(this.IsCollapsed ? "展开预设 ▼" : "收起 ▲"))
-        {
-            this.IsCollapsed = !this.IsCollapsed;
         }
     }
 
@@ -295,12 +313,13 @@ public sealed class MannequinRestockWindow : ExtendedWindow
                 return;
             }
 
-            // Attach the panel to the addon's right edge. The native dialogs
-            // (equipment picker, price input) open on that side, so dock to the
-            // left edge while any of them is visible — ImGui always renders above
-            // the game UI and would otherwise cover them. Also fall back to the
-            // left when there is no room on screen, and clamp vertically so the
-            // table never extends past the bottom of the screen.
+            // Attach the panel to the addon's right edge. The equipment picker
+            // opens on that side, so dock to the left edge while it is visible
+            // (or during a whole restock run so the panel does not bounce) —
+            // ImGui always renders above the game UI and would otherwise cover
+            // it. Centered dialogs (price input, prompts) do not move the panel.
+            // Also fall back to the left when there is no room on screen, and
+            // clamp vertically so the table never extends past the screen.
             var viewport = ImGui.GetMainViewport();
             var rightEdge = addon->X + addon->GetScaledWidth(true);
             var top = (float)(addon->Y + 2);
@@ -310,8 +329,8 @@ public sealed class MannequinRestockWindow : ExtendedWindow
                 top = Math.Max(viewport.Pos.Y, viewportBottom - this.lastWindowSize.Y);
             }
 
-            var isObstructed = this.restockService.IsOverlayObstructed();
-            if (isObstructed || rightEdge + this.lastWindowSize.X > viewport.Pos.X + viewport.Size.X)
+            var dockLeft = this.restockService.IsRestocking || this.restockService.IsEquipmentPickerVisible();
+            if (dockLeft || rightEdge + this.lastWindowSize.X > viewport.Pos.X + viewport.Size.X)
             {
                 ImGui.SetNextWindowPos(new Vector2(addon->X, top), ImGuiCond.Always, new Vector2(1, 0));
             }

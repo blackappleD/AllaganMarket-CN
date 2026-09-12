@@ -8,6 +8,15 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2022] - 2026-09-13
+
+### Fixed
+- "只按整套出售" is now actually ticked at the end of a run: the checkbox registers its handler as a ButtonClick event (often on a collision node inside the component), while the synthesized click only ever dispatched MouseClick at the component node, so nothing happened. Clicks now try ButtonClick first and fall back through the component's child nodes, and the run verifies the box really shows as ticked before pressing 确定 — if it does not, the status message says so instead of silently committing a per-piece listing.
+- The preset panel no longer jumps to the left side whenever any dialog opens (e.g. the sell-as-set confirmation): it only docks left while the equipment picker is open (which occupies the right edge) or during a restock run, so it does not bounce between sides.
+
+### Changed
+- The collapse control now matches the retainer list overlay: a chevron icon button (left to collapse, right to expand) instead of the text button.
+
 ## [1.4.0.2021] - 2026-09-13
 
 ### Fixed
