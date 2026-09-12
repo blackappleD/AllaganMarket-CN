@@ -632,13 +632,8 @@ public sealed class MannequinRestockService : IHostedService
     /// </summary>
     private async Task<bool> TryEnableSellAsSetAsync(CancellationToken cancellationToken)
     {
-        var result = await this.framework.RunOnFrameworkThread(this.TryTickSellAsSetCheckBox);
-        if (result == SellAsSetResult.AlreadyEnabled)
-        {
-            return true;
-        }
-
-        if (result == SellAsSetResult.NotFound)
+        var state = await this.framework.RunOnFrameworkThread(() => this.ReadSellAsSetCheckBox());
+        if (state == null)
         {
             var components = await this.framework.RunOnFrameworkThread(this.DescribeMannequinComponents);
             this.pluginLog.Warning(
@@ -647,21 +642,53 @@ public sealed class MannequinRestockService : IHostedService
             return false;
         }
 
-        if (await this.WaitForAddonAsync("SelectYesno", cancellationToken, 15, false))
+        if (state == true)
         {
-            await this.FireCallbackAsync("SelectYesno", cancellationToken, 0);
-            if (!await this.WaitUntilAddonGoneAsync("SelectYesno", cancellationToken))
-            {
-                // Leaving the prompt open would make the following 确定 click land
-                // on the dialog instead of the shop window.
-                this.pluginLog.Warning("[MannequinRestock] the sell-as-set confirmation stayed open.");
-                return false;
-            }
+            return true;
         }
 
-        // Trust the checkbox itself, not the click: only report success once the
-        // game shows the box as ticked.
-        for (var attempt = 0; attempt < 20; attempt++)
+        // Strategy 1: replay the node's registered event to its own listener —
+        // the checkbox registers mouse events to itself and converts them into a
+        // ButtonClick for the window, so this mimics a real click most closely.
+        if (await this.framework.RunOnFrameworkThread(() => this.ClickSellAsSetCheckBox(false)) &&
+            await this.ConfirmSellAsSetPromptAsync(cancellationToken))
+        {
+            return true;
+        }
+
+        // Strategy 2: set the checked state directly, then notify the window so
+        // it reads the new state and raises its confirmation prompt.
+        if (await this.framework.RunOnFrameworkThread(() => this.ClickSellAsSetCheckBox(true)) &&
+            await this.ConfirmSellAsSetPromptAsync(cancellationToken))
+        {
+            return true;
+        }
+
+        this.pluginLog.Warning("[MannequinRestock] the sell-as-set checkbox did not react to either click strategy.");
+        return false;
+    }
+
+    /// <summary>
+    /// The confirmation prompt appearing is the real signal the window registered
+    /// the change, so success requires it to show up, be answered, and close, and
+    /// the checkbox to read as ticked afterwards.
+    /// </summary>
+    private async Task<bool> ConfirmSellAsSetPromptAsync(CancellationToken cancellationToken)
+    {
+        if (!await this.WaitForAddonAsync("SelectYesno", cancellationToken, 15, false))
+        {
+            this.pluginLog.Warning("[MannequinRestock] no confirmation prompt appeared after clicking the sell-as-set checkbox.");
+            return false;
+        }
+
+        await this.FireCallbackAsync("SelectYesno", cancellationToken, 0);
+        if (!await this.WaitUntilAddonGoneAsync("SelectYesno", cancellationToken))
+        {
+            this.pluginLog.Warning("[MannequinRestock] the sell-as-set confirmation stayed open.");
+            return false;
+        }
+
+        for (var attempt = 0; attempt < 10; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (await this.framework.RunOnFrameworkThread(() => this.ReadSellAsSetCheckBox() == true))
@@ -673,8 +700,77 @@ public sealed class MannequinRestockService : IHostedService
             await Task.Delay(100, cancellationToken);
         }
 
-        this.pluginLog.Warning("[MannequinRestock] the sell-as-set checkbox is still unticked after clicking it.");
+        this.pluginLog.Warning("[MannequinRestock] the sell-as-set checkbox is still unticked after confirming the prompt.");
         return false;
+    }
+
+    private unsafe bool ClickSellAsSetCheckBox(bool setCheckedFirst)
+    {
+        var node = this.FindSellAsSetCheckBoxNode(out var addon);
+        if (node == null)
+        {
+            return false;
+        }
+
+        this.pluginLog.Information(
+            "[MannequinRestock] sell-as-set checkbox node={NodeId}; setChecked={SetChecked}; events: {Events}",
+            node->NodeId,
+            setCheckedFirst,
+            DescribeNodeEvents(addon, node));
+
+        if (setCheckedFirst)
+        {
+            var checkBox = (AtkComponentCheckBox*)node->GetAsAtkComponentNode()->Component;
+            if (checkBox != null)
+            {
+                checkBox->IsChecked = true;
+            }
+        }
+
+        return ClickNode(addon, node);
+    }
+
+    private static unsafe string DescribeNodeEvents(AtkUnitBase* addon, AtkResNode* node)
+    {
+        var parts = new List<string>();
+        AppendNodeEvents(addon, node, "self", parts);
+        if ((ushort)node->Type >= 1000)
+        {
+            var component = node->GetAsAtkComponentNode()->Component;
+            if (component != null)
+            {
+                var uldManager = component->UldManager;
+                for (var index = 0; index < uldManager.NodeListCount; index++)
+                {
+                    var child = uldManager.NodeList[index];
+                    if (child != null)
+                    {
+                        AppendNodeEvents(addon, child, $"child{child->NodeId}", parts);
+                    }
+                }
+            }
+        }
+
+        return parts.Count == 0 ? "<none>" : string.Join(" | ", parts);
+    }
+
+    private static unsafe void AppendNodeEvents(AtkUnitBase* addon, AtkResNode* node, string label, List<string> parts)
+    {
+        var events = new List<string>();
+        for (var registered = node->AtkEventManager.Event; registered != null; registered = registered->NextEvent)
+        {
+            var listener = registered->Listener == null
+                ? "null"
+                : registered->Listener == (AtkEventListener*)addon
+                    ? "addon"
+                    : "component";
+            events.Add($"{(int)registered->State.EventType}/p{registered->Param}/{listener}");
+        }
+
+        if (events.Count > 0)
+        {
+            parts.Add($"{label}[{string.Join(",", events)}]");
+        }
     }
 
     /// <summary>
@@ -722,24 +818,6 @@ public sealed class MannequinRestockService : IHostedService
 
         var addon = (AtkUnitBase*)pointer.Address;
         return this.IsReady(addon) ? DescribeComponentTypes(&addon->UldManager) : "<not ready>";
-    }
-
-    private unsafe SellAsSetResult TryTickSellAsSetCheckBox()
-    {
-        var node = this.FindSellAsSetCheckBoxNode(out var addon);
-        if (node == null)
-        {
-            return SellAsSetResult.NotFound;
-        }
-
-        // Never toggle a checkbox that is already ticked.
-        var checkBox = (AtkComponentCheckBox*)node->GetAsAtkComponentNode()->Component;
-        if (checkBox != null && checkBox->IsChecked)
-        {
-            return SellAsSetResult.AlreadyEnabled;
-        }
-
-        return ClickNode(addon, node) ? SellAsSetResult.Clicked : SellAsSetResult.NotFound;
     }
 
     private unsafe bool TryClickComponent(string addonName, ComponentType componentType, int ordinal)
@@ -890,11 +968,13 @@ public sealed class MannequinRestockService : IHostedService
                     continue;
                 }
 
-                // Hand the node's own registered event object back to the window
-                // instead of fabricating one: the game filled in the listener and
-                // target, and component handlers reject events pointing elsewhere.
+                // Hand the node's own registered event object back to whichever
+                // listener the game registered it for: components register mouse
+                // events to themselves and convert them into a ButtonClick for
+                // the window, so delivering to the addon skips that conversion.
                 var eventData = default(AtkEventData);
-                addon->ReceiveEvent(eventType, (int)registered->Param, registered, &eventData);
+                var listener = registered->Listener != null ? registered->Listener : (AtkEventListener*)addon;
+                listener->ReceiveEvent(eventType, (int)registered->Param, registered, &eventData);
                 return true;
             }
         }
@@ -1856,20 +1936,6 @@ public enum RestockItemSource
     RetainerInventory,
 }
 
-/// <summary>
-/// Outcome of trying to tick the "只按整套出售" checkbox.
-/// </summary>
-public enum SellAsSetResult
-{
-    /// <summary>The checkbox node could not be located or clicked.</summary>
-    NotFound,
-
-    /// <summary>The checkbox was already ticked, so nothing was clicked.</summary>
-    AlreadyEnabled,
-
-    /// <summary>The checkbox was clicked and may raise a confirmation prompt.</summary>
-    Clicked,
-}
 
 /// <summary>
 /// A single AtkValue passed to <c>AtkUnitBase.FireCallback</c>. Values convert

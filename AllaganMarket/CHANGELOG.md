@@ -8,6 +8,15 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2027] - 2026-09-13
+
+### Fixed
+- Sell-as-set clicking now delivers the replayed event to the listener the game registered it for (the checkbox component registers mouse events to itself and converts them into a ButtonClick for the window; delivering to the window skipped that conversion, which is why nothing happened). If that still does not raise the confirmation prompt, a second strategy sets the checked state directly and notifies the window.
+- Success is now judged by the real signal — the confirmation prompt appearing, being answered, and the checkbox reading as ticked afterwards — instead of the click merely having been dispatched.
+
+### Changed
+- Every sell-as-set click attempt logs the checkbox node's full registered event inventory (event types, params, listener ownership), so if the control still does not react the log pinpoints what it actually listens for.
+
 ## [1.4.0.2026] - 2026-09-13
 
 ### Fixed
