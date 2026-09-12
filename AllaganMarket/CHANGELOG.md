@@ -8,6 +8,14 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2023] - 2026-09-13
+
+### Fixed
+- One-click restock reported "当前没有检测到售罄装备" while every native slot was visibly empty: after collecting the earnings of a sold set the agent data keeps the item entries with an availability value that is neither "listed" nor "sold out", and only "sold out" counted as needing restock. Any slot whose availability is not "listed" is now treated as needing restock; the removal step is only attempted for genuinely sold-out slots (a collected slot is already clear in the native window), and the final per-item verification requires the slot to read as actively listed again rather than merely holding the item id.
+
+### Changed
+- The capture log now dumps each occupied slot's raw availability value, so any further unknown availability state is identifiable from the log.
+
 ## [1.4.0.2022] - 2026-09-13
 
 ### Fixed

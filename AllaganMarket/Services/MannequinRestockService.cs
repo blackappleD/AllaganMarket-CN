@@ -58,8 +58,11 @@ public sealed class MannequinRestockService : IHostedService
     // tree can never overflow the stack (an uncatchable crash for the whole game).
     private const int MaxNodeDepth = 24;
 
-    // AgentMerchantSettingInfo availability value observed for sold-out slots
-    // (0 = empty, 1 = listed, 2 = sold out).
+    // AgentMerchantSettingInfo availability values: 1 = listed. 2 = sold out
+    // (item still occupies the native slot). Other values with an item id set
+    // (e.g. after collecting the earnings of a sold set) leave the native slot
+    // empty, so only the listed state counts as "does not need restocking".
+    private const byte AvailabilityListed = 1;
     private const byte AvailabilitySoldOut = 2;
 
     // Native dialogs that open above MerchantSetting; the overlay hides while
@@ -437,7 +440,10 @@ public sealed class MannequinRestockService : IHostedService
 
         // 1. Take the sold-out entry off the slot. An occupied slot opens a
         //    context menu; "收回" asks for confirmation, "移除已售罄商品" does not.
-        if (await this.ReadSlotItemIdAsync(item.EquipmentSlot) != 0)
+        //    Slots whose agent entry lingers after the earnings were collected
+        //    are already empty in the native window, so those skip the removal.
+        var (slotItemId, slotAvailability) = await this.ReadSlotStateAsync(item.EquipmentSlot);
+        if (slotItemId != 0 && slotAvailability == AvailabilitySoldOut)
         {
             this.pluginLog.Information("[MannequinRestock] state=remove-sold-out; slot={Slot}.", item.EquipmentSlot);
             await this.FireCallbackAsync(MannequinAddonNameValue, cancellationToken, MerchantSettingSlotContextCallback, slot);
@@ -456,6 +462,13 @@ public sealed class MannequinRestockService : IHostedService
             {
                 throw new InvalidOperationException($"槽位 {slot} 的售罄商品未能下架。");
             }
+        }
+        else if (slotItemId != 0)
+        {
+            this.pluginLog.Information(
+                "[MannequinRestock] slot={Slot}; availability={Availability}; native slot is already clear, skipping removal.",
+                item.EquipmentSlot,
+                slotAvailability);
         }
 
         // 2. Open the equipment picker for the now empty slot.
@@ -848,39 +861,46 @@ public sealed class MannequinRestockService : IHostedService
         return false;
     }
 
-    private Task<long> ReadSlotItemIdAsync(int equipmentSlot)
+    private Task<(long ItemId, byte Availability)> ReadSlotStateAsync(int equipmentSlot)
     {
-        return this.framework.RunOnFrameworkThread(() => this.ReadSlotItemId(equipmentSlot));
+        return this.framework.RunOnFrameworkThread(() => this.ReadSlotState(equipmentSlot));
     }
 
-    private unsafe long ReadSlotItemId(int equipmentSlot)
+    private unsafe (long ItemId, byte Availability) ReadSlotState(int equipmentSlot)
     {
         if (equipmentSlot < 0 || equipmentSlot >= MannequinSlotCount)
         {
-            return -1;
+            return (-1, 0);
         }
 
         var agentInfo = AgentMerchantSettingInfo.Instance();
-        return agentInfo == null ? -1 : agentInfo->ItemsSpan[equipmentSlot].ItemId;
+        if (agentInfo == null)
+        {
+            return (-1, 0);
+        }
+
+        var slot = agentInfo->ItemsSpan[equipmentSlot];
+        return (slot.ItemId, slot.Availability);
     }
 
     /// <summary>
-    /// Waits until the mannequin slot holds the expected item id (0 = empty), so each
-    /// step is driven by the real game state instead of fixed delays.
+    /// Waits until the mannequin slot holds the expected item id (0 = empty; a non-zero
+    /// id must also read as actively listed), so each step is driven by the real game
+    /// state instead of fixed delays.
     /// </summary>
     private async Task<bool> WaitForSlotItemAsync(int equipmentSlot, uint expectedItemId, CancellationToken cancellationToken, int attempts = 40)
     {
         for (var attempt = 0; attempt < attempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var itemId = await this.ReadSlotItemIdAsync(equipmentSlot);
+            var (itemId, availability) = await this.ReadSlotStateAsync(equipmentSlot);
             if (itemId < 0)
             {
                 // Agent data is unavailable; do not block the run on it.
                 return true;
             }
 
-            if (itemId == expectedItemId)
+            if (itemId == expectedItemId && (expectedItemId == 0 || availability == AvailabilityListed))
             {
                 return true;
             }
@@ -1188,17 +1208,19 @@ public sealed class MannequinRestockService : IHostedService
 
             var hasUnknownPrices = false;
             var itemIndex = 0;
+            var rawStates = new List<string>();
             foreach (var item in agentInfo->ItemsSpan)
             {
                 if (item.ItemId != 0)
                 {
+                    rawStates.Add($"{itemIndex}:{item.ItemId}@{item.Availability}");
                     var capturedItem = new MannequinItem
                     {
                         EquipmentSlot = itemIndex,
                         ItemId = item.ItemId,
                         IsHighQuality = item.IsHighQuality,
                         UnitPrice = item.Price > 0 ? (uint)Math.Min(item.Price, uint.MaxValue) : 0,
-                        IsSoldOut = item.Availability == AvailabilitySoldOut,
+                        IsSoldOut = item.Availability != AvailabilityListed,
                     };
 
                     // Sold-out slots lose the HQ flag and the price in the agent data,
@@ -1253,10 +1275,13 @@ public sealed class MannequinRestockService : IHostedService
             }
 
             this.lastCaptureSignature = signature;
+            this.pluginLog.Information(
+                "[MannequinDiag] raw slot availability: {RawStates}.",
+                rawStates.Count == 0 ? "<all empty>" : string.Join(", ", rawStates));
             foreach (var item in captured.Items)
             {
                 this.pluginLog.Information(
-                    "[MannequinDiag] slot={Slot}; itemId={ItemId}; hq={HighQuality}; price={Price}; soldOut={SoldOut}.",
+                    "[MannequinDiag] slot={Slot}; itemId={ItemId}; hq={HighQuality}; price={Price}; needsRestock={NeedsRestock}.",
                     item.EquipmentSlot,
                     item.ItemId,
                     item.IsHighQuality,
