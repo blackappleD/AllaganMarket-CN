@@ -120,7 +120,35 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         }
 
         ImGui.Separator();
+        this.DrawOptions();
         this.DrawSlotTable(restockConfiguration);
+    }
+
+    private void DrawOptions()
+    {
+        using var disabled = ImRaii.Disabled(this.restockService.IsRestocking);
+        var sellAsSet = this.restockService.SellAsSetOnFinish;
+        if (ImGui.Checkbox("完成后勾选只按整套出售", ref sellAsSet))
+        {
+            this.restockService.SellAsSetOnFinish = sellAsSet;
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("装备售罄时游戏会取消该勾选；补货完成后自动重新勾选并确认提示。");
+        }
+
+        ImGui.SameLine();
+        var confirmOnFinish = this.restockService.ConfirmOnFinish;
+        if (ImGui.Checkbox("完成后点击确定", ref confirmOnFinish))
+        {
+            this.restockService.ConfirmOnFinish = confirmOnFinish;
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("补货完成后自动点击原生窗口的确定按钮提交设定。");
+        }
     }
 
     private void DrawHeader(int soldOutCount, int actionableCount)

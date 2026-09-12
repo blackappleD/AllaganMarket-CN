@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -28,6 +28,35 @@ public sealed class MannequinRestockService : IHostedService
     private const string MannequinAddonNameValue = "MerchantSetting";
     private const long DiagnosticIntervalMilliseconds = 2000;
     private const long CaptureRetryIntervalMilliseconds = 500;
+
+    // The native window briefly reports itself as not-ready while it refreshes
+    // after a slot changes. Tearing the run down on the first such frame is what
+    // used to abort restocking immediately, so allow a short grace period.
+    private const long AddonGraceMilliseconds = 2000;
+
+    private const string SellAsSetSettingKey = "MannequinRestockSellAsSet";
+    private const string ConfirmOnFinishSettingKey = "MannequinRestockConfirmOnFinish";
+
+    // MerchantSetting callbacks (verified against the native flow):
+    // 11 = 确定 (commit and close), 12 = list equipment in slot,
+    // 13 = slot context menu (remove listed/sold-out item).
+    private const int MerchantSettingConfirmCallback = 11;
+    private const int MerchantSettingListSlotCallback = 12;
+    private const int MerchantSettingSlotContextCallback = 13;
+    private const int MerchantEquipSelectChooseCallback = 19;
+    private const int RetainerSellConfirmCallback = 0;
+
+    // Generic "cancel/close" value the Atk dialogs accept as their only argument.
+    private const int CloseCallbackValue = -1;
+
+    // Event state flags a real mouse click carries; synthesized clicks copy them.
+    private const byte ClickEventStateFlags = 132;
+
+    private const int MannequinSlotCount = 12;
+
+    // Native node trees are shallow; the cap only exists so a malformed or cyclic
+    // tree can never overflow the stack (an uncatchable crash for the whole game).
+    private const int MaxNodeDepth = 24;
 
     // AgentMerchantSettingInfo availability value observed for sold-out slots
     // (0 = empty, 1 = listed, 2 = sold out).
@@ -63,8 +92,13 @@ public sealed class MannequinRestockService : IHostedService
     private readonly ExcelSheet<Item> itemSheet;
     private readonly Dictionary<nint, string> lastAddonDiagnosticStates = [];
     private readonly Dictionary<nint, string> recentAddonDiagnostics = [];
+
+    // Guards restockCancellationTokenSource: the run's finally block disposes it
+    // from a thread pool thread while the framework thread can still cancel it.
+    private readonly object restockLock = new();
     private long lastDiagnosticMilliseconds;
     private long lastCaptureAttemptMilliseconds;
+    private long lastAddonSeenMilliseconds;
     private string? lastCaptureSignature;
     private CancellationTokenSource? restockCancellationTokenSource;
     private List<RestockItemPlan>? restockExecution;
@@ -103,6 +137,26 @@ public sealed class MannequinRestockService : IHostedService
 
     public bool IsRestocking => this.restockExecution != null;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether "只按整套出售" is re-enabled once every
+    /// slot has been relisted. The game clears it while items are sold out.
+    /// </summary>
+    public bool SellAsSetOnFinish
+    {
+        get => !this.configuration.BooleanSettings.TryGetValue(SellAsSetSettingKey, out var value) || value;
+        set => this.configuration.Set(SellAsSetSettingKey, value);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the native 确定 button is pressed at the
+    /// end of a run, which commits the shop settings and closes the window.
+    /// </summary>
+    public bool ConfirmOnFinish
+    {
+        get => !this.configuration.BooleanSettings.TryGetValue(ConfirmOnFinishSettingKey, out var value) || value;
+        set => this.configuration.Set(ConfirmOnFinishSettingKey, value);
+    }
+
     public event System.Action? StateChanged;
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -121,7 +175,7 @@ public sealed class MannequinRestockService : IHostedService
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        this.restockCancellationTokenSource?.Cancel();
+        this.CancelRestock();
         this.framework.Update -= this.OnFrameworkUpdate;
         this.addonLifecycle.UnregisterListener(AddonEvent.PostSetup, MannequinAddonNameValue, this.OnAnyAddonChanged);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostRefresh, MannequinAddonNameValue, this.OnAnyAddonChanged);
@@ -177,16 +231,43 @@ public sealed class MannequinRestockService : IHostedService
             return;
         }
 
-        this.restockCancellationTokenSource = new CancellationTokenSource();
+        CancellationToken cancellationToken;
+        lock (this.restockLock)
+        {
+            this.restockCancellationTokenSource = new CancellationTokenSource();
+            cancellationToken = this.restockCancellationTokenSource.Token;
+        }
+
         this.restockExecution = plan.ToList();
         this.StatusMessage = $"开始补货：{plan.Count} 个售罄装备。";
         this.StateChanged?.Invoke();
-        _ = this.ExecuteRestockAsync(this.restockExecution, this.restockCancellationTokenSource.Token);
+        _ = this.ExecuteRestockAsync(this.restockExecution, cancellationToken);
+    }
+
+    /// <summary>
+    /// Cancels an in-flight restock run. The token source is only ever touched under
+    /// <see cref="restockLock"/> because the run disposes it from a thread pool thread
+    /// while the framework thread can still be cancelling it.
+    /// </summary>
+    private void CancelRestock()
+    {
+        lock (this.restockLock)
+        {
+            try
+            {
+                this.restockCancellationTokenSource?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The run already finished and disposed its own token source.
+            }
+        }
     }
 
     private async Task ExecuteRestockAsync(List<RestockItemPlan> execution, CancellationToken cancellationToken)
     {
         var restockedCount = 0;
+        var failedCount = 0;
         try
         {
             foreach (var plan in execution)
@@ -223,17 +304,54 @@ public sealed class MannequinRestockService : IHostedService
 
                 this.StatusMessage = $"正在补货：{itemName}。";
                 this.StateChanged?.Invoke();
-                await this.RestockPlayerInventoryItemAsync(plan.Item, cancellationToken);
-                restockedCount++;
+                try
+                {
+                    await this.RestockPlayerInventoryItemAsync(plan.Item, cancellationToken);
+                    restockedCount++;
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    if (!this.IsMannequinWindowVisible)
+                    {
+                        // The shop window went away mid-item; report that instead of
+                        // blaming the item for a step that could never have worked.
+                        throw new OperationCanceledException("服装模特商店设定窗口已关闭。");
+                    }
+
+                    // One slot failing (missing from the picker, a dialog that
+                    // never appeared) should not strand the remaining slots.
+                    failedCount++;
+                    this.StatusMessage = $"{itemName} 补货失败，继续处理下一件。";
+                    this.pluginLog.Error(
+                        exception,
+                        "[MannequinRestock] slot={Slot}; item={ItemId}; restock failed.",
+                        plan.Item.EquipmentSlot,
+                        plan.Item.ItemId);
+                    this.StateChanged?.Invoke();
+                    await this.RecoverFromFailedItemAsync(cancellationToken);
+                }
             }
 
             this.StatusMessage = restockedCount > 0
                 ? $"补货完成：已重新上架 {restockedCount}/{execution.Count} 个装备。"
                 : "补货结束：没有可以重新上架的装备（缺失、价格未知或在雇员中）。";
+            if (failedCount > 0)
+            {
+                this.StatusMessage += $" {failedCount} 个装备失败，请查看日志。";
+            }
+
             this.pluginLog.Information(
-                "[MannequinRestock] execution completed; restocked={Restocked}; planned={Count}.",
+                "[MannequinRestock] execution completed; restocked={Restocked}; failed={Failed}; planned={Count}.",
                 restockedCount,
+                failedCount,
                 execution.Count);
+            this.StateChanged?.Invoke();
+
+            if (restockedCount > 0)
+            {
+                await this.FinishRestockAsync(cancellationToken);
+            }
+
             await Task.Delay(250, cancellationToken);
             if (this.IsMannequinWindowVisible)
             {
@@ -255,36 +373,106 @@ public sealed class MannequinRestockService : IHostedService
         finally
         {
             this.restockExecution = null;
-            this.restockCancellationTokenSource?.Dispose();
-            this.restockCancellationTokenSource = null;
+            lock (this.restockLock)
+            {
+                this.restockCancellationTokenSource?.Dispose();
+                this.restockCancellationTokenSource = null;
+            }
+
             this.StateChanged?.Invoke();
         }
     }
 
-    private async Task RestockPlayerInventoryItemAsync(MannequinItem item, CancellationToken cancellationToken)
+    /// <summary>
+    /// Runs the two closing steps of the manual flow: tick "只按整套出售" (confirming the
+    /// prompt the game raises) and press 确定 so the shop settings are committed.
+    /// </summary>
+    private async Task FinishRestockAsync(CancellationToken cancellationToken)
     {
-        await this.WaitForAddonAsync(MannequinAddonNameValue, cancellationToken);
-        this.pluginLog.Information("[MannequinRestock] state=remove-sold-out; slot={Slot}.", item.EquipmentSlot);
-        await this.FireCallbackAsync(MannequinAddonNameValue, 13, cancellationToken, item.EquipmentSlot);
-
-        if (await this.WaitForAddonAsync("ContextMenu", cancellationToken, 10, false))
+        if (!await this.WaitForAddonAsync(MannequinAddonNameValue, cancellationToken, 20, false))
         {
-            this.pluginLog.Information("[MannequinRestock] state=remove-context-menu; slot={Slot}.", item.EquipmentSlot);
-            await this.FireCallbackAsync("ContextMenu", 0, cancellationToken, 0, 0);
-            if (await this.WaitForAddonAsync("SelectYesno", cancellationToken, 10, false))
+            return;
+        }
+
+        if (this.SellAsSetOnFinish && !await this.TryEnableSellAsSetAsync(cancellationToken))
+        {
+            this.StatusMessage += " 未能自动勾选“只按整套出售”，请手动勾选。";
+            this.StateChanged?.Invoke();
+        }
+
+        if (this.ConfirmOnFinish)
+        {
+            // Only commit when nothing is covering the shop window, otherwise the
+            // callback would be delivered while a dialog still owns the flow.
+            if (await this.IsAnyObstructingAddonReadyAsync())
             {
-                await this.FireCallbackAsync("SelectYesno", 0, cancellationToken);
+                this.StatusMessage += " 仍有对话框未关闭，未自动点击确定。";
+                this.pluginLog.Warning("[MannequinRestock] skipping confirm; a dialog is still open.");
+                this.StateChanged?.Invoke();
+                return;
+            }
+
+            this.pluginLog.Information("[MannequinRestock] state=confirm.");
+            await this.FireCallbackAsync(MannequinAddonNameValue, cancellationToken, MerchantSettingConfirmCallback, 0);
+        }
+    }
+
+    private async Task<bool> IsAnyObstructingAddonReadyAsync()
+    {
+        foreach (var addonName in OverlayObstructingAddons)
+        {
+            if (await this.IsAddonReadyAsync(addonName))
+            {
+                return true;
             }
         }
 
-        await this.WaitUntilAddonGoneAsync("ContextMenu", cancellationToken);
-        await this.FireCallbackAsync(MannequinAddonNameValue, 12, cancellationToken, item.EquipmentSlot);
+        return false;
+    }
+
+    private async Task RestockPlayerInventoryItemAsync(MannequinItem item, CancellationToken cancellationToken)
+    {
+        var slot = (uint)item.EquipmentSlot;
+        await this.WaitForAddonAsync(MannequinAddonNameValue, cancellationToken);
+
+        // 1. Take the sold-out entry off the slot. An occupied slot opens a
+        //    context menu; "收回" asks for confirmation, "移除已售罄商品" does not.
+        if (await this.ReadSlotItemIdAsync(item.EquipmentSlot) != 0)
+        {
+            this.pluginLog.Information("[MannequinRestock] state=remove-sold-out; slot={Slot}.", item.EquipmentSlot);
+            await this.FireCallbackAsync(MannequinAddonNameValue, cancellationToken, MerchantSettingSlotContextCallback, slot);
+            if (await this.WaitForAddonAsync("ContextMenu", cancellationToken, 15, false))
+            {
+                await this.FireCallbackAsync("ContextMenu", cancellationToken, 0, 0, 0);
+                if (await this.WaitForAddonAsync("SelectYesno", cancellationToken, 8, false))
+                {
+                    await this.FireCallbackAsync("SelectYesno", cancellationToken, 0);
+                    await this.WaitUntilAddonGoneAsync("SelectYesno", cancellationToken);
+                }
+            }
+
+            await this.WaitUntilAddonGoneAsync("ContextMenu", cancellationToken);
+            if (!await this.WaitForSlotItemAsync(item.EquipmentSlot, 0, cancellationToken))
+            {
+                throw new InvalidOperationException($"槽位 {slot} 的售罄商品未能下架。");
+            }
+        }
+
+        // 2. Open the equipment picker for the now empty slot.
+        await this.FireCallbackAsync(MannequinAddonNameValue, cancellationToken, MerchantSettingListSlotCallback, slot);
         await this.WaitForAddonAsync("MerchantEquipSelect", cancellationToken);
 
-        var callback = await this.FindEquipmentCallbackAsync(item, cancellationToken);
+        // 3. Pick the item; when it is not in the bag list, try the retainer tab.
+        var callback = await this.FindEquipmentCallbackAsync(item, cancellationToken, 15);
+        if (callback < 0 && await this.TrySwitchEquipSelectSourceAsync(cancellationToken))
+        {
+            callback = await this.FindEquipmentCallbackAsync(item, cancellationToken, 15);
+        }
+
         if (callback < 0)
         {
-            throw new InvalidOperationException($"未在 MerchantEquipSelect 找到物品 {item.ItemId} (HQ={item.IsHighQuality})。");
+            await this.TryCloseAddonAsync("MerchantEquipSelect");
+            throw new InvalidOperationException($"未在装备选择窗口找到 {this.GetItemName(item.ItemId)}。");
         }
 
         this.pluginLog.Information(
@@ -292,17 +480,322 @@ public sealed class MannequinRestockService : IHostedService
             item.EquipmentSlot,
             item.ItemId,
             callback);
-        await this.FireCallbackAsync("MerchantEquipSelect", 19, cancellationToken, callback);
+        await this.FireCallbackAsync("MerchantEquipSelect", cancellationToken, MerchantEquipSelectChooseCallback, callback);
+
+        // 4. Apply the preset price and confirm. The price is written into the
+        //    numeric input directly (the pattern the listing/undercut services
+        //    already use) so the stack is never confirmed at a stale price.
         await this.WaitForAddonAsync("RetainerSell", cancellationToken);
-        await this.FireCallbackAsync("RetainerSell", 2, cancellationToken, (int)item.UnitPrice);
-        await this.FireCallbackAsync("RetainerSell", 0, cancellationToken);
+        if (!await this.SetRetainerSellPriceAsync(item.UnitPrice))
+        {
+            await this.TryCloseAddonAsync("RetainerSell");
+            throw new InvalidOperationException($"未能设置 {this.GetItemName(item.ItemId)} 的上架单价。");
+        }
+
+        await this.FireCallbackAsync("RetainerSell", cancellationToken, RetainerSellConfirmCallback);
         await this.WaitUntilAddonGoneAsync("RetainerSell", cancellationToken);
-        await Task.Delay(250, cancellationToken);
+
+        // 5. Wait for the slot to hold the item again before moving on.
+        if (!await this.WaitForSlotItemAsync(item.EquipmentSlot, item.ItemId, cancellationToken))
+        {
+            throw new InvalidOperationException($"{this.GetItemName(item.ItemId)} 未能重新上架到槽位 {slot}。");
+        }
     }
 
-    private async Task<int> FindEquipmentCallbackAsync(MannequinItem item, CancellationToken cancellationToken)
+    /// <summary>
+    /// Writes the unit price into the RetainerSell numeric input. Setting the value
+    /// only updates the input, so the caller still has to fire the confirm callback.
+    /// </summary>
+    private Task<bool> SetRetainerSellPriceAsync(uint price)
     {
-        for (var attempt = 0; attempt < 30; attempt++)
+        return this.framework.RunOnFrameworkThread(() =>
+        {
+            var pointer = this.gameGui.GetAddonByName("RetainerSell");
+            if (pointer == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            unsafe
+            {
+                var addon = (AddonRetainerSell*)pointer.Address;
+                if (!this.IsReady(&addon->AtkUnitBase) || addon->AskingPrice == null)
+                {
+                    return false;
+                }
+
+                addon->AskingPrice->SetValue((int)price);
+                return true;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Switches the equipment picker between the bag and the retainer inventory by
+    /// clicking its source tabs, so gear stored on the active retainer can be listed.
+    /// </summary>
+    private async Task<bool> TrySwitchEquipSelectSourceAsync(CancellationToken cancellationToken)
+    {
+        var switched = await this.framework.RunOnFrameworkThread(
+            () => this.TryClickComponent("MerchantEquipSelect", ComponentType.RadioButton, 1));
+        if (!switched)
+        {
+            return false;
+        }
+
+        this.pluginLog.Information("[MannequinRestock] state=switch-equip-source; target=retainer.");
+        await Task.Delay(300, cancellationToken);
+        return true;
+    }
+
+    /// <summary>
+    /// Closes any dialog the failed item left open so the next slot starts from
+    /// the shop settings window instead of inheriting a half-finished flow.
+    /// </summary>
+    private async Task RecoverFromFailedItemAsync(CancellationToken cancellationToken)
+    {
+        foreach (var addonName in new[] { "SelectYesno", "ContextMenu", "RetainerSell", "MerchantEquipSelect" })
+        {
+            if (!await this.IsAddonReadyAsync(addonName))
+            {
+                continue;
+            }
+
+            await this.TryCloseAddonAsync(addonName);
+            await this.WaitUntilAddonGoneAsync(addonName, cancellationToken, 10);
+        }
+    }
+
+    private async Task TryCloseAddonAsync(string addonName)
+    {
+        try
+        {
+            await this.framework.RunOnFrameworkThread(() =>
+            {
+                var pointer = this.gameGui.GetAddonByName(addonName);
+                if (pointer == IntPtr.Zero)
+                {
+                    return;
+                }
+
+                unsafe
+                {
+                    var addon = (AtkUnitBase*)pointer.Address;
+                    if (this.IsReady(addon))
+                    {
+                        var value = new AtkValue { Type = AtkValueType.Int, Int = CloseCallbackValue };
+                        addon->FireCallback(1, &value, true);
+                    }
+                }
+            });
+        }
+        catch (Exception exception)
+        {
+            this.pluginLog.Warning(exception, "[MannequinRestock] failed to close {AddonName}.", addonName);
+        }
+    }
+
+    /// <summary>
+    /// Re-enables "只按整套出售" and confirms the prompt the game shows for it.
+    /// The checkbox is clicked through its own node because no addon callback for
+    /// it is known; a missing checkbox is reported instead of guessing.
+    /// </summary>
+    private async Task<bool> TryEnableSellAsSetAsync(CancellationToken cancellationToken)
+    {
+        var result = await this.framework.RunOnFrameworkThread(this.TryTickSellAsSetCheckBox);
+        if (result == SellAsSetResult.AlreadyEnabled)
+        {
+            return true;
+        }
+
+        if (result == SellAsSetResult.NotFound)
+        {
+            this.pluginLog.Warning("[MannequinRestock] could not find the sell-as-set checkbox.");
+            return false;
+        }
+
+        if (await this.WaitForAddonAsync("SelectYesno", cancellationToken, 15, false))
+        {
+            await this.FireCallbackAsync("SelectYesno", cancellationToken, 0);
+            if (!await this.WaitUntilAddonGoneAsync("SelectYesno", cancellationToken))
+            {
+                // Leaving the prompt open would make the following 确定 click land
+                // on the dialog instead of the shop window.
+                this.pluginLog.Warning("[MannequinRestock] the sell-as-set confirmation stayed open.");
+                return false;
+            }
+        }
+
+        this.pluginLog.Information("[MannequinRestock] state=sell-as-set-enabled.");
+        return true;
+    }
+
+    private unsafe SellAsSetResult TryTickSellAsSetCheckBox()
+    {
+        var pointer = this.gameGui.GetAddonByName(MannequinAddonNameValue);
+        if (pointer == IntPtr.Zero)
+        {
+            return SellAsSetResult.NotFound;
+        }
+
+        var addon = (AtkUnitBase*)pointer.Address;
+        if (!this.IsReady(addon) || addon->RootNode == null)
+        {
+            return SellAsSetResult.NotFound;
+        }
+
+        var remaining = 0;
+        var node = FindComponentNode(addon->RootNode, ComponentType.CheckBox, ref remaining);
+        if (node == null)
+        {
+            return SellAsSetResult.NotFound;
+        }
+
+        // Never toggle a checkbox that is already ticked.
+        var checkBox = (AtkComponentCheckBox*)node->GetAsAtkComponentNode()->Component;
+        if (checkBox != null && checkBox->IsChecked)
+        {
+            return SellAsSetResult.AlreadyEnabled;
+        }
+
+        return ClickNode(addon, node) ? SellAsSetResult.Clicked : SellAsSetResult.NotFound;
+    }
+
+    private unsafe bool TryClickComponent(string addonName, ComponentType componentType, int ordinal)
+    {
+        var pointer = this.gameGui.GetAddonByName(addonName);
+        if (pointer == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var addon = (AtkUnitBase*)pointer.Address;
+        if (!this.IsReady(addon) || addon->RootNode == null)
+        {
+            return false;
+        }
+
+        var remaining = ordinal;
+        var node = FindComponentNode(addon->RootNode, componentType, ref remaining);
+        return node != null && ClickNode(addon, node);
+    }
+
+    private static unsafe AtkResNode* FindComponentNode(AtkResNode* root, ComponentType componentType, ref int remaining, int depth = 0)
+    {
+        if (root == null || depth > MaxNodeDepth)
+        {
+            return null;
+        }
+
+        for (var node = root->ChildNode; node != null; node = node->NextSiblingNode)
+        {
+            if ((ushort)node->Type >= 1000)
+            {
+                var component = node->GetAsAtkComponentNode()->Component;
+                var objectInfo = component == null ? null : (AtkUldComponentInfo*)component->UldManager.Objects;
+                if (objectInfo != null && objectInfo->ComponentType == componentType)
+                {
+                    if (remaining == 0)
+                    {
+                        return node;
+                    }
+
+                    remaining--;
+                }
+            }
+
+            var descendant = FindComponentNode(node, componentType, ref remaining, depth + 1);
+            if (descendant != null)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Dispatches a synthesized mouse click at a component node, for controls whose
+    /// addon callback id is unknown (the sell-as-set checkbox, the picker tabs).
+    /// </summary>
+    private static unsafe bool ClickNode(AtkUnitBase* addon, AtkResNode* node)
+    {
+        var stage = AtkStage.Instance();
+        if (stage == null)
+        {
+            return false;
+        }
+
+        for (var registered = node->AtkEventManager.Event; registered != null; registered = registered->NextEvent)
+        {
+            if (registered->State.EventType != AtkEventType.MouseClick)
+            {
+                continue;
+            }
+
+            var atkEvent = new AtkEvent
+            {
+                Listener = (AtkEventListener*)addon,
+                Target = &stage->AtkEventTarget,
+                Node = node,
+                // 132 = the flag combination the game itself sets on a click event
+                // that originates from the mouse (forced | has-node | is-dragging off).
+                State = new AtkEventState { StateFlags = (AtkEventStateFlags)ClickEventStateFlags },
+            };
+            var eventData = default(AtkEventData);
+            addon->ReceiveEvent(AtkEventType.MouseClick, (int)registered->Param, &atkEvent, &eventData);
+            return true;
+        }
+
+        return false;
+    }
+
+    private Task<long> ReadSlotItemIdAsync(int equipmentSlot)
+    {
+        return this.framework.RunOnFrameworkThread(() => this.ReadSlotItemId(equipmentSlot));
+    }
+
+    private unsafe long ReadSlotItemId(int equipmentSlot)
+    {
+        if (equipmentSlot < 0 || equipmentSlot >= MannequinSlotCount)
+        {
+            return -1;
+        }
+
+        var agentInfo = AgentMerchantSettingInfo.Instance();
+        return agentInfo == null ? -1 : agentInfo->ItemsSpan[equipmentSlot].ItemId;
+    }
+
+    /// <summary>
+    /// Waits until the mannequin slot holds the expected item id (0 = empty), so each
+    /// step is driven by the real game state instead of fixed delays.
+    /// </summary>
+    private async Task<bool> WaitForSlotItemAsync(int equipmentSlot, uint expectedItemId, CancellationToken cancellationToken, int attempts = 40)
+    {
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var itemId = await this.ReadSlotItemIdAsync(equipmentSlot);
+            if (itemId < 0)
+            {
+                // Agent data is unavailable; do not block the run on it.
+                return true;
+            }
+
+            if (itemId == expectedItemId)
+            {
+                return true;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        return false;
+    }
+
+    private async Task<int> FindEquipmentCallbackAsync(MannequinItem item, CancellationToken cancellationToken, int attempts = 30)
+    {
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var callback = await this.framework.RunOnFrameworkThread(() => this.FindEquipmentCallback(item));
@@ -357,14 +850,14 @@ public sealed class MannequinRestockService : IHostedService
         return -1;
     }
 
-    private async Task FireCallbackAsync(string addonName, int callbackIndex, CancellationToken cancellationToken, params int[] arguments)
+    private async Task FireCallbackAsync(string addonName, CancellationToken cancellationToken, params CallbackValue[] values)
     {
         await this.framework.RunOnFrameworkThread(() =>
         {
             var pointer = this.gameGui.GetAddonByName(addonName);
             if (pointer == IntPtr.Zero)
             {
-                throw new InvalidOperationException($"窗口 {addonName} 不存在，无法执行 callback {callbackIndex}。");
+                throw new InvalidOperationException($"窗口 {addonName} 不存在，无法执行 callback。");
             }
 
             unsafe
@@ -372,16 +865,18 @@ public sealed class MannequinRestockService : IHostedService
                 var addon = (AtkUnitBase*)pointer.Address;
                 if (!this.IsReady(addon))
                 {
-                    throw new InvalidOperationException($"窗口 {addonName} 尚未就绪，无法执行 callback {callbackIndex}。");
+                    throw new InvalidOperationException($"窗口 {addonName} 尚未就绪，无法执行 callback。");
                 }
 
-                var values = stackalloc AtkValue[arguments.Length];
-                for (var index = 0; index < arguments.Length; index++)
+                var atkValues = stackalloc AtkValue[values.Length];
+                for (var index = 0; index < values.Length; index++)
                 {
-                    values[index] = new AtkValue { Type = AtkValueType.Int, Int = arguments[index] };
+                    atkValues[index] = values[index].Value;
                 }
 
-                addon->FireCallback((uint)callbackIndex, values, true);
+                // The first value is the callback id; the count must match the
+                // number of values or the game reads uninitialised memory.
+                addon->FireCallback((uint)values.Length, atkValues, true);
             }
         });
         await Task.Delay(100, cancellationToken);
@@ -409,19 +904,25 @@ public sealed class MannequinRestockService : IHostedService
         return false;
     }
 
-    private async Task WaitUntilAddonGoneAsync(string addonName, CancellationToken cancellationToken)
+    /// <summary>
+    /// Polls until the addon is closed. Returns false when it is still open after
+    /// <paramref name="attempts"/> polls so callers can treat that as a failure.
+    /// </summary>
+    private async Task<bool> WaitUntilAddonGoneAsync(string addonName, CancellationToken cancellationToken, int attempts = 30)
     {
-        for (var attempt = 0; attempt < 30; attempt++)
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var ready = await this.IsAddonReadyAsync(addonName);
             if (!ready)
             {
-                return;
+                return true;
             }
 
             await Task.Delay(100, cancellationToken);
         }
+
+        return false;
     }
 
     private Task<bool> IsAddonReadyAsync(string addonName)
@@ -450,9 +951,9 @@ public sealed class MannequinRestockService : IHostedService
         return current;
     }
 
-    private static unsafe AtkResNode* FindChildById(AtkResNode* root, uint id)
+    private static unsafe AtkResNode* FindChildById(AtkResNode* root, uint id, int depth = 0)
     {
-        if (root == null)
+        if (root == null || depth > MaxNodeDepth)
         {
             return null;
         }
@@ -464,7 +965,7 @@ public sealed class MannequinRestockService : IHostedService
                 return node;
             }
 
-            var descendant = FindChildById(node, id);
+            var descendant = FindChildById(node, id, depth + 1);
             if (descendant != null)
             {
                 return descendant;
@@ -695,6 +1196,10 @@ public sealed class MannequinRestockService : IHostedService
             .ToArray();
     }
 
+    /// <summary>
+    /// Resolves a display name. Lumina rows are immutable once loaded, so unlike the
+    /// game memory this file touches, this is safe to call off the framework thread.
+    /// </summary>
     public string GetItemName(uint itemId)
     {
         return this.itemSheet.TryGetRow(itemId, out var item) ? item.Name.ToString() : $"物品 {itemId}";
@@ -903,7 +1408,16 @@ public sealed class MannequinRestockService : IHostedService
         {
             if (this.IsMannequinWindowVisible)
             {
-                this.restockCancellationTokenSource?.Cancel();
+                // The window reports itself as not-ready for a few frames while it
+                // refreshes after a slot changes, so keep an in-flight restock run
+                // alive until the window has really been gone for a moment.
+                if (this.IsRestocking &&
+                    Environment.TickCount64 - this.lastAddonSeenMilliseconds < AddonGraceMilliseconds)
+                {
+                    return;
+                }
+
+                this.CancelRestock();
                 this.IsMannequinWindowVisible = false;
                 this.MannequinAddonAddress = IntPtr.Zero;
                 this.MannequinAddonName = null;
@@ -915,6 +1429,8 @@ public sealed class MannequinRestockService : IHostedService
 
             return;
         }
+
+        this.lastAddonSeenMilliseconds = Environment.TickCount64;
 
         if (addonAddress.Address == this.MannequinAddonAddress && this.IsMannequinWindowVisible)
         {
@@ -946,7 +1462,7 @@ public sealed class MannequinRestockService : IHostedService
             return;
         }
 
-        this.restockCancellationTokenSource?.Cancel();
+        this.CancelRestock();
         this.IsMannequinWindowVisible = false;
         this.MannequinAddonName = null;
         this.MannequinAddonAddress = IntPtr.Zero;
@@ -1071,6 +1587,46 @@ public enum RestockItemSource
     Missing,
     PlayerInventory,
     RetainerInventory,
+}
+
+/// <summary>
+/// Outcome of trying to tick the "只按整套出售" checkbox.
+/// </summary>
+public enum SellAsSetResult
+{
+    /// <summary>The checkbox node could not be located or clicked.</summary>
+    NotFound,
+
+    /// <summary>The checkbox was already ticked, so nothing was clicked.</summary>
+    AlreadyEnabled,
+
+    /// <summary>The checkbox was clicked and may raise a confirmation prompt.</summary>
+    Clicked,
+}
+
+/// <summary>
+/// A single AtkValue passed to <c>AtkUnitBase.FireCallback</c>. Values convert
+/// implicitly so call sites read like the native callback they mirror, and the
+/// count handed to the game always matches the number of values.
+/// </summary>
+public readonly struct CallbackValue
+{
+    private CallbackValue(AtkValue value)
+    {
+        this.Value = value;
+    }
+
+    public AtkValue Value { get; }
+
+    public static implicit operator CallbackValue(int value)
+    {
+        return new CallbackValue(new AtkValue { Type = AtkValueType.Int, Int = value });
+    }
+
+    public static implicit operator CallbackValue(uint value)
+    {
+        return new CallbackValue(new AtkValue { Type = AtkValueType.UInt, UInt = value });
+    }
 }
 
 public sealed record RestockItemPlan(MannequinItem Item, RestockItemSource Source);

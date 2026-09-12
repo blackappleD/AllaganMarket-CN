@@ -8,6 +8,20 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2019] - 2026-09-13
+
+### Fixed
+- One-click restock did nothing: every addon callback was fired with the callback id passed as the *value count*, so the game read uninitialised memory instead of the intended command (e.g. "13 values" for a 1-value call). Callbacks now pass the id as the first AtkValue with the correct count, matching the native protocol.
+- A restock run is no longer cancelled by a single frame in which the MerchantSetting window reports itself as not-ready while it refreshes after a slot changes; the run is only torn down once the window has really been gone for two seconds.
+- The unit price is now written into the price input directly (the same way batch listing and auto-undercut already do it) and the item is skipped if that fails, instead of relying on an unverified callback that could have confirmed the listing at a stale price.
+- Closing the mannequin window exactly as a run finished could throw from the cancellation token source being disposed and cancelled at the same time; the token source is now only touched under a lock.
+
+### Changed
+- Restocking now walks the manual sequence slot by slot instead of firing a burst of callbacks: take the sold-out item off the slot (confirming the prompt when the game raises one), open the equipment picker, select the item, apply the preset unit price, confirm, and wait for the slot to actually hold the item again before moving on. Each step waits on real game state rather than a fixed delay.
+- When the item is not in the bag list, the equipment picker switches to the retainer tab and searches again before giving up.
+- After the last slot the run ticks "只按整套出售" (answering the confirmation prompt) and presses 确定, so the shop settings are committed. Both steps can be turned off from the preset panel; the checkbox is left alone when it is already ticked, a message asks you to tick it manually if the control cannot be found, and 确定 is skipped while any dialog is still open.
+- A slot that fails (item missing from the picker, a dialog that never appears) no longer aborts the whole run: stray dialogs are closed and the remaining slots are processed, with the failure count reported at the end.
+
 ## [1.4.0.2018] - 2026-09-13
 
 ### Added
