@@ -330,7 +330,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
             }
 
             ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
-            using (var combo = ImRaii.Combo("##batch-list-item", candidates[selectedIndex].Label, ImGuiComboFlags.HeightLarge))
+            using (var combo = ImRaii.Combo("##batch-list-item", candidates[selectedIndex].Label))
             {
                 if (combo)
                 {
@@ -340,24 +340,30 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                         ImGui.SetKeyboardFocusHere();
                     }
 
+                    // The search box stays pinned above its own scroll region;
+                    // otherwise the whole popup scrolls and drags the focused
+                    // input (and the IME indicator) off screen.
                     ImGui.SetNextItemWidth(-1);
                     ImGui.InputTextWithHint("##batch-list-search", "搜索物品……", ref this.batchListSearchText, 64);
                     ImGui.Separator();
 
-                    for (var index = 0; index < candidates.Count; index++)
+                    using (ImRaii.Child("##batch-list-items", new Vector2(0, 260 * ImGui.GetIO().FontGlobalScale)))
                     {
-                        if (this.batchListSearchText.Length > 0 &&
-                            !candidates[index].Label.Contains(this.batchListSearchText, StringComparison.OrdinalIgnoreCase))
+                        for (var index = 0; index < candidates.Count; index++)
                         {
-                            continue;
-                        }
+                            if (this.batchListSearchText.Length > 0 &&
+                                !candidates[index].Label.Contains(this.batchListSearchText, StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
 
-                        if (ImGui.Selectable(candidates[index].Label, index == selectedIndex))
-                        {
-                            this.batchListItemId = candidates[index].ItemId;
-                            this.batchListIsHq = candidates[index].IsHq;
-                            this.batchListStackCount = candidates[index].StackCount;
-                            ImGui.CloseCurrentPopup();
+                            if (ImGui.Selectable(candidates[index].Label, index == selectedIndex))
+                            {
+                                this.batchListItemId = candidates[index].ItemId;
+                                this.batchListIsHq = candidates[index].IsHq;
+                                this.batchListStackCount = candidates[index].StackCount;
+                                ImGui.CloseCurrentPopup();
+                            }
                         }
                     }
                 }

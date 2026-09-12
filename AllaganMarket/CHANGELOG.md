@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2015] - 2026-09-12
+
+### Fixed
+- The batch listing search box is now pinned above its own scrolling item list, so scrolling the dropdown no longer drags the focused input (and the floating IME indicator) off screen.
+
 ## [1.4.0.2014] - 2026-09-12
 
 ### Added
