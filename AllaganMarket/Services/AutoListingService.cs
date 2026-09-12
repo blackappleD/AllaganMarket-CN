@@ -385,7 +385,8 @@ public sealed class AutoListingService : IHostedService, IDisposable
                     {
                         var text = list->GetItemLabel(index).ToString().Trim();
                         labels.Add(text);
-                        if (text.Equals("出售", StringComparison.Ordinal) ||
+                        if (text.Equals("到市场出售", StringComparison.Ordinal) ||
+                            text.Equals("出售", StringComparison.Ordinal) ||
                             text.Contains("Put Up for Sale", StringComparison.OrdinalIgnoreCase))
                         {
                             selectedIndex = index;
