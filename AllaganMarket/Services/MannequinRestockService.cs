@@ -296,22 +296,11 @@ public sealed class MannequinRestockService : IHostedService
                     continue;
                 }
 
-                if (plan.Source == RestockItemSource.RetainerInventory)
-                {
-                    this.StatusMessage = $"{itemName} 在雇员中；请先在传唤铃打开该雇员并取出装备。";
-                    this.pluginLog.Warning(
-                        "[MannequinRestock] slot={Slot}; item={ItemId}; source=retainer; automatic bell withdrawal is not available in this build.",
-                        plan.Item.EquipmentSlot,
-                        plan.Item.ItemId);
-                    this.StateChanged?.Invoke();
-                    continue;
-                }
-
                 this.StatusMessage = $"正在补货：{itemName}。";
                 this.StateChanged?.Invoke();
                 try
                 {
-                    await this.RestockPlayerInventoryItemAsync(plan.Item, cancellationToken);
+                    await this.RestockPlayerInventoryItemAsync(plan.Item, plan.Source, cancellationToken);
                     restockedCount++;
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
@@ -440,7 +429,7 @@ public sealed class MannequinRestockService : IHostedService
         return false;
     }
 
-    private async Task RestockPlayerInventoryItemAsync(MannequinItem item, CancellationToken cancellationToken)
+    private async Task RestockPlayerInventoryItemAsync(MannequinItem item, RestockItemSource source, CancellationToken cancellationToken)
     {
         var slot = (uint)item.EquipmentSlot;
         await this.WaitForAddonAsync(MannequinAddonNameValue, cancellationToken);
@@ -483,7 +472,14 @@ public sealed class MannequinRestockService : IHostedService
         await this.FireCallbackAsync(MannequinAddonNameValue, cancellationToken, MerchantSettingListSlotCallback, slot);
         await this.WaitForAddonAsync("MerchantEquipSelect", cancellationToken);
 
-        // 3. Pick the item; when it is not in the bag list, try the retainer tab.
+        // 3. Pick the item. Gear stored on the retainer only shows on the picker's
+        //    retainer tab, so switch there first when that is where the item is;
+        //    either way the other tab is retried before giving up.
+        if (source == RestockItemSource.RetainerInventory)
+        {
+            await this.TrySwitchEquipSelectSourceAsync(cancellationToken);
+        }
+
         var callback = await this.FindEquipmentCallbackAsync(item, cancellationToken, 15);
         if (callback < 0 && await this.TrySwitchEquipSelectSourceAsync(cancellationToken))
         {

@@ -283,7 +283,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
                 ImGui.TextColored(ImGuiColors.DalamudOrange, "在雇员");
                 if (ImGui.IsItemHovered())
                 {
-                    ImGui.SetTooltip("装备在雇员背包中，请先取出到自己背包。");
+                    ImGui.SetTooltip("装备在雇员背包中，补货时会自动切换到装备选择窗口的雇员标签上架。");
                 }
 
                 break;

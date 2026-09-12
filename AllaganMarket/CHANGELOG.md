@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2030] - 2026-09-13
+
+### Fixed
+- Equipment stored in the retainer's inventory is no longer skipped with a "take it out at a summoning bell first" message: the equipment picker's retainer tab lists that gear directly, so the restock flow now switches to it up front for retainer-sourced items (and still retries the other tab before giving up). The panel tooltip for 在雇员 items was updated accordingly.
+
 ## [1.4.0.2029] - 2026-09-13
 
 ### Changed
