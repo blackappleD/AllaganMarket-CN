@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2024] - 2026-09-13
+
+### Fixed
+- Each relisted item stalled for the full verification timeout and was then reported as failed even though the game had accepted the listing: after collecting a sold set's earnings the agent's availability bytes can stay stale, so requiring the slot to read as "actively listed" never succeeded. The price dialog closing after confirm is now the success signal (a dialog that stays open is treated as rejected and closed), and the agent check is a short best-effort confirmation that logs a warning instead of failing the item. This also restores the closing steps (sell-as-set + 确定), which were skipped because every "failed" item kept the restocked count at zero.
+
 ## [1.4.0.2023] - 2026-09-13
 
 ### Fixed

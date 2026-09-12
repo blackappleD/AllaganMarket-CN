@@ -506,12 +506,26 @@ public sealed class MannequinRestockService : IHostedService
         }
 
         await this.FireCallbackAsync("RetainerSell", cancellationToken, RetainerSellConfirmCallback);
-        await this.WaitUntilAddonGoneAsync("RetainerSell", cancellationToken);
 
-        // 5. Wait for the slot to hold the item again before moving on.
-        if (!await this.WaitForSlotItemAsync(item.EquipmentSlot, item.ItemId, cancellationToken))
+        // The game closes the price dialog when the listing is accepted, so that
+        // is the success signal; a dialog that stays open means it was rejected.
+        if (!await this.WaitUntilAddonGoneAsync("RetainerSell", cancellationToken))
         {
-            throw new InvalidOperationException($"{this.GetItemName(item.ItemId)} 未能重新上架到槽位 {slot}。");
+            await this.TryCloseAddonAsync("RetainerSell");
+            throw new InvalidOperationException($"{this.GetItemName(item.ItemId)} 的上架确认没有被接受。");
+        }
+
+        // 5. Give the agent data a moment to reflect the new listing, but only as
+        //    a best effort: after the earnings of a full set were collected the
+        //    availability bytes can stay stale for a while even though the item
+        //    is visibly listed, and hard-failing here made every item stall for
+        //    the full timeout and reported a successful listing as a failure.
+        if (!await this.WaitForSlotItemAsync(item.EquipmentSlot, item.ItemId, cancellationToken, 10))
+        {
+            this.pluginLog.Warning(
+                "[MannequinRestock] slot={Slot}; item={ItemId}; the agent data did not confirm the listing; continuing on the closed price dialog.",
+                item.EquipmentSlot,
+                item.ItemId);
         }
     }
 
