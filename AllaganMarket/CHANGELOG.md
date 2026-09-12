@@ -8,6 +8,12 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2029] - 2026-09-13
+
+### Changed
+- Restocking is markedly faster. The per-item agent confirmation is skipped when the agent entry was stale to begin with (it never updates in that state, so every item paid a guaranteed one-second timeout plus a warning), all state-driven waits poll at 50ms instead of 100ms, and the post-callback settle delay was halved.
+- Sell-as-set goes straight to the strategy verified in-game — set the checked state and notify the window — instead of first spending ~1.7s on the event-replay attempt that never toggles the component.
+
 ## [1.4.0.2028] - 2026-09-13
 
 ### Fixed

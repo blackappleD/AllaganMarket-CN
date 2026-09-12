@@ -29,6 +29,11 @@ public sealed class MannequinRestockService : IHostedService
     private const long DiagnosticIntervalMilliseconds = 2000;
     private const long CaptureRetryIntervalMilliseconds = 500;
 
+    // Poll cadence for the state-driven waits and the post-callback settle
+    // delay. Dialogs open within a frame or two, so 50ms keeps the flow snappy
+    // while the attempt counts still leave over a second of headroom.
+    private const int PollIntervalMilliseconds = 50;
+
     // The native window briefly reports itself as not-ready while it refreshes
     // after a slot changes. Tearing the run down on the first such frame is what
     // used to abort restocking immediately, so allow a short grace period.
@@ -445,6 +450,7 @@ public sealed class MannequinRestockService : IHostedService
         //    Slots whose agent entry lingers after the earnings were collected
         //    are already empty in the native window, so those skip the removal.
         var (slotItemId, slotAvailability) = await this.ReadSlotStateAsync(item.EquipmentSlot);
+        var agentSlotIsLive = slotItemId == 0 || slotAvailability == AvailabilitySoldOut;
         if (slotItemId != 0 && slotAvailability == AvailabilitySoldOut)
         {
             this.pluginLog.Information("[MannequinRestock] state=remove-sold-out; slot={Slot}.", item.EquipmentSlot);
@@ -517,12 +523,12 @@ public sealed class MannequinRestockService : IHostedService
             throw new InvalidOperationException($"{this.GetItemName(item.ItemId)} 的上架确认没有被接受。");
         }
 
-        // 5. Give the agent data a moment to reflect the new listing, but only as
-        //    a best effort: after the earnings of a full set were collected the
-        //    availability bytes can stay stale for a while even though the item
-        //    is visibly listed, and hard-failing here made every item stall for
-        //    the full timeout and reported a successful listing as a failure.
-        if (!await this.WaitForSlotItemAsync(item.EquipmentSlot, item.ItemId, cancellationToken, 10))
+        // 5. Give the agent data a moment to reflect the new listing — but only
+        //    when it was tracking the slot to begin with. A stale entry (left
+        //    behind after a sold set's earnings were collected) never updates,
+        //    so waiting on it just added a guaranteed timeout per item.
+        if (agentSlotIsLive &&
+            !await this.WaitForSlotItemAsync(item.EquipmentSlot, item.ItemId, cancellationToken, 10))
         {
             this.pluginLog.Warning(
                 "[MannequinRestock] slot={Slot}; item={ItemId}; the agent data did not confirm the listing; continuing on the closed price dialog.",
@@ -573,7 +579,7 @@ public sealed class MannequinRestockService : IHostedService
         }
 
         this.pluginLog.Information("[MannequinRestock] state=switch-equip-source; target=retainer.");
-        await Task.Delay(300, cancellationToken);
+        await Task.Delay(PollIntervalMilliseconds * 3, cancellationToken);
         return true;
     }
 
@@ -647,24 +653,16 @@ public sealed class MannequinRestockService : IHostedService
             return true;
         }
 
-        // Strategy 1: replay the node's registered event to its own listener —
-        // the checkbox registers mouse events to itself and converts them into a
-        // ButtonClick for the window, so this mimics a real click most closely.
-        if (await this.framework.RunOnFrameworkThread(() => this.ClickSellAsSetCheckBox(false)) &&
-            await this.ConfirmSellAsSetPromptAsync(cancellationToken))
-        {
-            return true;
-        }
-
-        // Strategy 2: set the checked state directly, then notify the window so
-        // it reads the new state and raises its confirmation prompt.
+        // Set the checked state directly, then notify the window so it reads the
+        // new state and raises its confirmation prompt. (Replaying the click
+        // event alone never toggles the component, verified in-game.)
         if (await this.framework.RunOnFrameworkThread(() => this.ClickSellAsSetCheckBox(true)) &&
             await this.ConfirmSellAsSetPromptAsync(cancellationToken))
         {
             return true;
         }
 
-        this.pluginLog.Warning("[MannequinRestock] the sell-as-set checkbox did not react to either click strategy.");
+        this.pluginLog.Warning("[MannequinRestock] the sell-as-set checkbox did not react to the click.");
         return false;
     }
 
@@ -697,7 +695,7 @@ public sealed class MannequinRestockService : IHostedService
                 return true;
             }
 
-            await Task.Delay(100, cancellationToken);
+            await Task.Delay(PollIntervalMilliseconds, cancellationToken);
         }
 
         this.pluginLog.Warning("[MannequinRestock] the sell-as-set checkbox is still unticked after confirming the prompt.");
@@ -1026,7 +1024,7 @@ public sealed class MannequinRestockService : IHostedService
                 return true;
             }
 
-            await Task.Delay(100, cancellationToken);
+            await Task.Delay(PollIntervalMilliseconds, cancellationToken);
         }
 
         return false;
@@ -1043,7 +1041,7 @@ public sealed class MannequinRestockService : IHostedService
                 return callback;
             }
 
-            await Task.Delay(100, cancellationToken);
+            await Task.Delay(PollIntervalMilliseconds, cancellationToken);
         }
 
         // Dump what the picker actually shows so a layout change is diagnosable
@@ -1177,7 +1175,7 @@ public sealed class MannequinRestockService : IHostedService
                 addon->FireCallback((uint)values.Length, atkValues, true);
             }
         });
-        await Task.Delay(100, cancellationToken);
+        await Task.Delay(PollIntervalMilliseconds, cancellationToken);
     }
 
     private async Task<bool> WaitForAddonAsync(string addonName, CancellationToken cancellationToken, int attempts = 40, bool throwOnTimeout = true)
@@ -1191,7 +1189,7 @@ public sealed class MannequinRestockService : IHostedService
                 return true;
             }
 
-            await Task.Delay(100, cancellationToken);
+            await Task.Delay(PollIntervalMilliseconds, cancellationToken);
         }
 
         if (throwOnTimeout)
@@ -1217,7 +1215,7 @@ public sealed class MannequinRestockService : IHostedService
                 return true;
             }
 
-            await Task.Delay(100, cancellationToken);
+            await Task.Delay(PollIntervalMilliseconds, cancellationToken);
         }
 
         return false;
