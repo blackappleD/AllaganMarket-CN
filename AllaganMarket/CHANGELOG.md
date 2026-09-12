@@ -8,6 +8,12 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2021] - 2026-09-13
+
+### Fixed
+- The preset panel no longer disappears while a native dialog (equipment picker, price input) is open: instead of hiding, it now docks to the left side of the shop window, since those dialogs open on the right.
+- A mannequin whose slots were emptied (items taken down but never relisted, e.g. after a failed run) showed an empty panel with nothing to restock. Slots that are empty in the game but known to the saved preset are now restored into the panel as needing restock, so one-click restock can relist them from the recorded item, HQ flag and price.
+
 ## [1.4.0.2020] - 2026-09-13
 
 ### Fixed

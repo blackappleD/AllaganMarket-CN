@@ -71,15 +71,6 @@ public sealed class MannequinRestockWindow : ExtendedWindow
             return false;
         }
 
-        // ImGui overlays always render above the native UI, so hide the panel
-        // while the user is interacting with the price/equipment dialogs to
-        // avoid covering them. Keep it visible during automated restocking so
-        // the progress status stays readable.
-        if (!this.restockService.IsRestocking && this.restockService.IsOverlayObstructed())
-        {
-            return false;
-        }
-
         return base.DrawConditions();
     }
 
@@ -304,8 +295,11 @@ public sealed class MannequinRestockWindow : ExtendedWindow
                 return;
             }
 
-            // Attach the panel to the addon's right edge; fall back to the left
-            // edge when there is no room on screen, and clamp vertically so the
+            // Attach the panel to the addon's right edge. The native dialogs
+            // (equipment picker, price input) open on that side, so dock to the
+            // left edge while any of them is visible — ImGui always renders above
+            // the game UI and would otherwise cover them. Also fall back to the
+            // left when there is no room on screen, and clamp vertically so the
             // table never extends past the bottom of the screen.
             var viewport = ImGui.GetMainViewport();
             var rightEdge = addon->X + addon->GetScaledWidth(true);
@@ -316,7 +310,8 @@ public sealed class MannequinRestockWindow : ExtendedWindow
                 top = Math.Max(viewport.Pos.Y, viewportBottom - this.lastWindowSize.Y);
             }
 
-            if (rightEdge + this.lastWindowSize.X > viewport.Pos.X + viewport.Size.X)
+            var isObstructed = this.restockService.IsOverlayObstructed();
+            if (isObstructed || rightEdge + this.lastWindowSize.X > viewport.Pos.X + viewport.Size.X)
             {
                 ImGui.SetNextWindowPos(new Vector2(addon->X, top), ImGuiCond.Always, new Vector2(1, 0));
             }

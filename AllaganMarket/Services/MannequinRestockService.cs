@@ -1153,6 +1153,24 @@ public sealed class MannequinRestockService : IHostedService
 
                     captured.Items.Add(capturedItem);
                 }
+                else if (saved != null)
+                {
+                    // A slot the saved preset knows about but that is currently empty
+                    // (e.g. the item was taken down but never relisted) is still
+                    // restockable, so surface it as needing restock.
+                    var savedItem = saved.Items.Find(existing => existing.EquipmentSlot == itemIndex && existing.ItemId != 0);
+                    if (savedItem != null)
+                    {
+                        var restoredItem = CloneItem(savedItem);
+                        restoredItem.IsSoldOut = true;
+                        if (restoredItem.UnitPrice == 0)
+                        {
+                            hasUnknownPrices = true;
+                        }
+
+                        captured.Items.Add(restoredItem);
+                    }
+                }
 
                 itemIndex++;
             }
