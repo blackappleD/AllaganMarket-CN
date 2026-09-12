@@ -18,6 +18,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
 
     private readonly MannequinRestockService restockService;
     private readonly IPluginLog pluginLog;
+    private float lastWindowHeight;
 
     public MannequinRestockWindow(
         MediatorService mediator,
@@ -47,7 +48,27 @@ public sealed class MannequinRestockWindow : ExtendedWindow
 
     public override bool DrawConditions()
     {
-        return this.restockService.IsMannequinWindowVisible && base.DrawConditions();
+        if (!this.restockService.IsMannequinWindowVisible)
+        {
+            return false;
+        }
+
+        // ImGui overlays always render above the native UI, so hide the overlay
+        // while the user is interacting with the price/equipment dialogs to
+        // avoid covering them. Keep it visible during automated restocking so
+        // the progress status stays readable.
+        if (!this.restockService.IsRestocking && this.restockService.IsOverlayObstructed())
+        {
+            return false;
+        }
+
+        return base.DrawConditions();
+    }
+
+    public override void PostDraw()
+    {
+        base.PostDraw();
+        this.lastWindowHeight = ImGui.GetWindowSize().Y;
     }
 
     public override void PreDraw()
@@ -110,17 +131,30 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         try
         {
             var addon = (FFXIVClientStructs.FFXIV.Component.GUI.AtkUnitBase*)this.restockService.MannequinAddonAddress;
-            if (addon != null && addon->IsVisible)
+            if (addon == null || !addon->IsVisible)
             {
-                // Anchor the overlay's bottom-right corner near the addon's
-                // bottom-right corner so the list grows upward instead of
-                // extending past the bottom of the native window.
+                return;
+            }
+
+            // Place the overlay outside the native window so it never covers
+            // native controls: right-aligned below the addon, or above it when
+            // there is no room left on screen.
+            var rightEdge = addon->X + addon->GetScaledWidth(true);
+            var below = addon->Y + addon->GetScaledHeight(true) - 6;
+            var viewport = ImGui.GetMainViewport();
+            if (below + this.lastWindowHeight > viewport.Pos.Y + viewport.Size.Y)
+            {
                 ImGui.SetNextWindowPos(
-                    new Vector2(
-                        addon->X + addon->GetScaledWidth(true) - 12,
-                        addon->Y + addon->GetScaledHeight(true) - 12),
+                    new Vector2(rightEdge, addon->Y + 6),
                     ImGuiCond.Always,
                     new Vector2(1, 1));
+            }
+            else
+            {
+                ImGui.SetNextWindowPos(
+                    new Vector2(rightEdge, below),
+                    ImGuiCond.Always,
+                    new Vector2(1, 0));
             }
         }
         catch (Exception exception)

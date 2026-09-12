@@ -33,6 +33,17 @@ public sealed class MannequinRestockService : IHostedService
     // (0 = empty, 1 = listed, 2 = sold out).
     private const byte AvailabilitySoldOut = 2;
 
+    // Native dialogs that open above MerchantSetting; the overlay hides while
+    // any of them is visible so it never covers UI the user is interacting with.
+    private static readonly string[] OverlayObstructingAddons =
+    [
+        "MerchantEquipSelect",
+        "RetainerSell",
+        "SelectYesno",
+        "ContextMenu",
+        "ItemSearchResult",
+    ];
+
     private static readonly InventoryType[] PlayerInventoryTypes =
     [
         InventoryType.Inventory1,
@@ -652,6 +663,19 @@ public sealed class MannequinRestockService : IHostedService
     public string GetItemName(uint itemId)
     {
         return this.itemSheet.TryGetRow(itemId, out var item) ? item.Name.ToString() : $"物品 {itemId}";
+    }
+
+    public bool IsOverlayObstructed()
+    {
+        foreach (var addonName in OverlayObstructingAddons)
+        {
+            if (this.IsAddonReadyOnFrameworkThread(addonName))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private unsafe RestockItemSource ResolveRestockSource(MannequinItem item)

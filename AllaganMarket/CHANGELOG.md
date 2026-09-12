@@ -8,6 +8,12 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2017] - 2026-09-13
+
+### Fixed
+- The mannequin restock overlay no longer covers native controls: it now sits outside the MerchantSetting window (right-aligned below it, or above it when there is no room on screen) instead of overlapping the confirm button area.
+- The overlay hides automatically while native dialogs (price adjustment, equipment selection, yes/no prompts, context menus) are open, since ImGui overlays always render above the game UI and would otherwise cover them. It stays visible during automated restocking so progress remains readable.
+
 ## [1.4.0.2016] - 2026-09-12
 
 ### Fixed
