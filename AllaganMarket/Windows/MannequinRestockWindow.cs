@@ -25,6 +25,12 @@ public sealed class MannequinRestockWindow : ExtendedWindow
     private const string CollapsedSettingKey = "MannequinRestockPanelCollapsed";
     private const float IconSize = 28;
     private const float PriceInputWidth = 90;
+    private const int MaxDropdownMatches = 100;
+
+    private static readonly string[] SlotNames =
+    [
+        "主手", "副手", "头部", "身体", "手部", "腿部", "脚部", "耳部", "颈部", "手腕", "右指", "左指",
+    ];
 
     private readonly MannequinRestockService restockService;
     private readonly Configuration configuration;
@@ -33,6 +39,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
     private readonly IPluginLog pluginLog;
     private readonly IFont font;
     private Vector2 lastWindowSize;
+    private string equipmentSearchText = string.Empty;
 
     public MannequinRestockWindow(
         MediatorService mediator,
@@ -93,10 +100,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
 
     public override void Draw()
     {
-        var restockConfiguration = this.restockService.CurrentConfiguration;
-        var plan = restockConfiguration == null || restockConfiguration.Items.Count == 0
-            ? Array.Empty<RestockItemPlan>()
-            : this.restockService.BuildRestockPlan(restockConfiguration);
+        var plan = this.restockService.BuildRestockPlan();
         var actionable = plan.Count(item => item.Source != RestockItemSource.Missing && item.Item.UnitPrice > 0);
 
         this.DrawHeader(plan.Count, actionable);
@@ -109,7 +113,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         ImGui.TextWrapped(this.restockService.StatusMessage);
         ImGui.PopTextWrapPos();
 
-        if (restockConfiguration == null || restockConfiguration.Items.Count == 0)
+        if (this.restockService.CurrentConfiguration == null)
         {
             ImGui.TextColored(ImGuiColors.DalamudGrey, "尚未读取到模特装备数据。");
             return;
@@ -117,7 +121,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
 
         ImGui.Separator();
         this.DrawOptions();
-        this.DrawSlotTable(restockConfiguration);
+        this.DrawSlotTable();
     }
 
     private void DrawOptions()
@@ -187,7 +191,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         }
     }
 
-    private void DrawSlotTable(Models.MannequinConfiguration restockConfiguration)
+    private void DrawSlotTable()
     {
         using var disabled = ImRaii.Disabled(this.restockService.IsRestocking);
         using var table = ImRaii.Table(
@@ -200,46 +204,127 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         }
 
         ImGui.TableSetupColumn("##icon", ImGuiTableColumnFlags.WidthFixed, IconSize);
-        ImGui.TableSetupColumn("装备", ImGuiTableColumnFlags.WidthFixed, 170);
+        ImGui.TableSetupColumn("装备", ImGuiTableColumnFlags.WidthFixed, 190);
         ImGui.TableSetupColumn("价格", ImGuiTableColumnFlags.WidthFixed, PriceInputWidth + 70);
         ImGui.TableSetupColumn("状态", ImGuiTableColumnFlags.WidthFixed, 60);
         ImGui.TableHeadersRow();
 
-        foreach (var item in restockConfiguration.Items.OrderBy(item => item.EquipmentSlot))
+        var presetItems = this.restockService.GetPresetItems();
+        for (var slot = 0; slot < SlotNames.Length; slot++)
         {
+            var item = presetItems.FirstOrDefault(preset => preset.EquipmentSlot == slot);
             ImGui.TableNextRow();
             ImGui.TableNextColumn();
-            this.DrawItemIcon(item);
-
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(this.restockService.GetItemName(item.ItemId));
-
-            ImGui.TableNextColumn();
-            var price = (int)item.UnitPrice;
-            ImGui.SetNextItemWidth(PriceInputWidth);
-            ImGui.InputInt($"##price{item.EquipmentSlot}_{item.ItemId}", ref price, 0, 0);
-            if (ImGui.IsItemDeactivatedAfterEdit())
+            if (item != null)
             {
-                this.restockService.UpdatePresetItem(
-                    item.EquipmentSlot,
-                    (uint)Math.Max(0, price),
-                    item.IsHighQuality);
+                this.DrawItemIcon(item);
+            }
+            else
+            {
+                ImGui.Dummy(new Vector2(IconSize, IconSize));
             }
 
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.SetTooltip("补货时的上架单价；装备在售时会自动记录。");
-            }
+            ImGui.TableNextColumn();
+            this.DrawEquipmentPicker(slot, item);
 
-            ImGui.SameLine();
-            var isHighQuality = item.IsHighQuality;
-            if (ImGui.Checkbox($"HQ##{item.EquipmentSlot}_{item.ItemId}", ref isHighQuality))
+            ImGui.TableNextColumn();
+            if (item != null)
             {
-                this.restockService.UpdatePresetItem(item.EquipmentSlot, item.UnitPrice, isHighQuality);
+                var price = (int)item.UnitPrice;
+                ImGui.SetNextItemWidth(PriceInputWidth);
+                ImGui.InputInt($"##price{slot}", ref price, 0, 0);
+                if (ImGui.IsItemDeactivatedAfterEdit())
+                {
+                    this.restockService.UpdatePresetItem(
+                        slot,
+                        item.ItemId,
+                        (uint)Math.Max(0, price),
+                        item.IsHighQuality);
+                }
+
+                if (ImGui.IsItemHovered())
+                {
+                    ImGui.SetTooltip("补货时的上架单价。");
+                }
+
+                ImGui.SameLine();
+                var isHighQuality = item.IsHighQuality;
+                if (ImGui.Checkbox($"HQ##{slot}", ref isHighQuality))
+                {
+                    this.restockService.UpdatePresetItem(slot, item.ItemId, item.UnitPrice, isHighQuality);
+                }
+            }
+            else
+            {
+                ImGui.TextDisabled("-");
             }
 
             ImGui.TableNextColumn();
             this.DrawSlotStatus(item);
+        }
+    }
+
+    private void DrawEquipmentPicker(int slot, Models.MannequinItem? item)
+    {
+        var label = item == null
+            ? $"选择{SlotNames[slot]}装备…"
+            : this.restockService.GetItemName(item.ItemId);
+        ImGui.SetNextItemWidth(185);
+        using var combo = ImRaii.Combo($"##equip{slot}", label, ImGuiComboFlags.HeightLargest);
+        if (!combo)
+        {
+            return;
+        }
+
+        if (ImGui.IsWindowAppearing())
+        {
+            this.equipmentSearchText = string.Empty;
+            ImGui.SetKeyboardFocusHere();
+        }
+
+        // The search box stays pinned above its own scroll region so scrolling
+        // the list never drags the focused input (and the IME indicator) away.
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint($"##equipsearch{slot}", "搜索装备……", ref this.equipmentSearchText, 64);
+        ImGui.Separator();
+
+        using var child = ImRaii.Child($"##equiplist{slot}", new Vector2(0, 240 * ImGui.GetIO().FontGlobalScale));
+        if (item != null && ImGui.Selectable("〔清除该槽位〕"))
+        {
+            this.restockService.UpdatePresetItem(slot, 0, 0, false);
+            ImGui.CloseCurrentPopup();
+        }
+
+        var options = this.restockService.GetEquippableItems(slot);
+        var shown = 0;
+        foreach (var option in options)
+        {
+            if (this.equipmentSearchText.Length > 0 &&
+                !option.Name.Contains(this.equipmentSearchText, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (ImGui.Selectable(option.Label, item != null && option.ItemId == item.ItemId))
+            {
+                this.restockService.UpdatePresetItem(
+                    slot,
+                    option.ItemId,
+                    item?.UnitPrice ?? 0,
+                    item?.IsHighQuality ?? true);
+                ImGui.CloseCurrentPopup();
+            }
+
+            if (++shown >= MaxDropdownMatches)
+            {
+                ImGui.TextDisabled($"仅显示前 {MaxDropdownMatches} 件，请输入名称缩小范围（共 {options.Count} 件）。");
+                break;
+            }
+        }
+
+        if (shown == 0)
+        {
+            ImGui.TextDisabled("没有匹配的装备。");
         }
     }
 
@@ -254,9 +339,15 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         ImGui.Image(icon.GetWrapOrEmpty().Handle, new Vector2(IconSize, IconSize));
     }
 
-    private void DrawSlotStatus(Models.MannequinItem item)
+    private void DrawSlotStatus(Models.MannequinItem? item)
     {
-        if (!item.IsSoldOut)
+        if (item == null)
+        {
+            ImGui.TextDisabled("未设置");
+            return;
+        }
+
+        if (this.restockService.IsPresetItemListed(item))
         {
             ImGui.TextColored(ImGuiColors.HealerGreen, "在售");
             return;

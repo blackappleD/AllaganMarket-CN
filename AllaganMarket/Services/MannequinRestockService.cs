@@ -97,6 +97,7 @@ public sealed class MannequinRestockService : IHostedService
     private readonly ExcelSheet<Item> itemSheet;
     private readonly Dictionary<nint, string> lastAddonDiagnosticStates = [];
     private readonly Dictionary<nint, string> recentAddonDiagnostics = [];
+    private readonly Dictionary<int, List<EquipmentOption>> equipmentCatalog = [];
 
     // Guards restockCancellationTokenSource: the run's finally block disposes it
     // from a thread pool thread while the framework thread can still cancel it.
@@ -224,14 +225,14 @@ public sealed class MannequinRestockService : IHostedService
             return;
         }
 
-        var plan = this.BuildRestockPlan(this.CurrentConfiguration);
+        var plan = this.BuildRestockPlan();
         this.pluginLog.Information(
             "Mannequin restock requested for {Count} items; {Missing} items are unavailable.",
             plan.Count,
             plan.Count(item => item.Source == RestockItemSource.Missing));
         if (plan.Count == 0)
         {
-            this.StatusMessage = "当前没有检测到售罄装备。";
+            this.StatusMessage = "当前没有需要补货的装备。";
             this.StateChanged?.Invoke();
             return;
         }
@@ -1522,27 +1523,60 @@ public sealed class MannequinRestockService : IHostedService
         this.StateChanged?.Invoke();
     }
 
-    public void UpdatePresetItem(int equipmentSlot, uint unitPrice, bool isHighQuality)
+    /// <summary>
+    /// Edits the user-owned preset directly. An item id of 0 clears the slot.
+    /// </summary>
+    public void UpdatePresetItem(int equipmentSlot, uint itemId, uint unitPrice, bool isHighQuality)
     {
         if (this.IsRestocking)
         {
-            // CurrentConfiguration can hold transient state mid-restock;
-            // persisting it would overwrite the saved snapshot for all slots.
             this.pluginLog.Debug("[MannequinRestock] ignoring preset edit while restocking; slot={Slot}.", equipmentSlot);
             return;
         }
 
-        var current = this.CurrentConfiguration;
-        var item = current?.Items.Find(existing => existing.EquipmentSlot == equipmentSlot);
-        if (current == null || item == null)
+        var mannequinId = this.CurrentConfiguration?.MannequinId ?? 0;
+        if (mannequinId == 0)
         {
-            this.pluginLog.Debug("[MannequinRestock] preset edit dropped; slot={Slot} not found in current configuration.", equipmentSlot);
+            this.pluginLog.Debug("[MannequinRestock] preset edit dropped; no mannequin is active.");
             return;
         }
 
-        item.UnitPrice = unitPrice;
-        item.IsHighQuality = isHighQuality;
-        this.PersistConfiguration(current);
+        if (!this.configuration.MannequinConfigurations.TryGetValue(mannequinId, out var saved))
+        {
+            saved = new MannequinConfiguration
+            {
+                MannequinId = mannequinId,
+                RetainerId = this.CurrentConfiguration?.RetainerId ?? 0,
+            };
+            this.configuration.MannequinConfigurations[mannequinId] = saved;
+        }
+
+        var row = saved.Items.Find(existing => existing.EquipmentSlot == equipmentSlot);
+        if (itemId == 0)
+        {
+            if (row != null)
+            {
+                saved.Items.Remove(row);
+            }
+        }
+        else if (row == null)
+        {
+            saved.Items.Add(new MannequinItem
+            {
+                EquipmentSlot = equipmentSlot,
+                ItemId = itemId,
+                UnitPrice = unitPrice,
+                IsHighQuality = isHighQuality,
+            });
+        }
+        else
+        {
+            row.ItemId = itemId;
+            row.UnitPrice = unitPrice;
+            row.IsHighQuality = isHighQuality;
+        }
+
+        this.configuration.IsDirty = true;
         this.StateChanged?.Invoke();
     }
 
@@ -1623,31 +1657,40 @@ public sealed class MannequinRestockService : IHostedService
 
     private void PersistConfiguration(MannequinConfiguration current)
     {
-        if (current.MannequinId == 0 || current.Items.Count == 0)
+        if (current.MannequinId == 0)
         {
             return;
         }
 
-        // Keep previously saved slots that are currently absent (e.g. an entry
-        // being replaced) so their price records survive. Items are cloned so
-        // the saved snapshot never aliases CurrentConfiguration.
-        this.configuration.MannequinConfigurations.TryGetValue(current.MannequinId, out var saved);
-        var toSave = new MannequinConfiguration
+        // The saved preset is owned by the user (edited from the panel), so a
+        // capture only fills in slots the preset does not know about yet and
+        // never overwrites existing entries — otherwise the periodic recapture
+        // would revert every panel edit within half a second.
+        if (!this.configuration.MannequinConfigurations.TryGetValue(current.MannequinId, out var saved))
         {
-            MannequinId = current.MannequinId,
-            RetainerId = current.RetainerId,
-            Items = current.Items.Select(CloneItem).ToList(),
-        };
-        if (saved != null)
-        {
-            toSave.Items.AddRange(
-                saved.Items
-                    .Where(existing => current.Items.All(item => item.EquipmentSlot != existing.EquipmentSlot))
-                    .Select(CloneItem));
+            saved = new MannequinConfiguration
+            {
+                MannequinId = current.MannequinId,
+                RetainerId = current.RetainerId,
+            };
+            this.configuration.MannequinConfigurations[current.MannequinId] = saved;
         }
 
-        this.configuration.MannequinConfigurations[current.MannequinId] = toSave;
-        this.configuration.IsDirty = true;
+        var added = false;
+        foreach (var item in current.Items)
+        {
+            if (item.ItemId != 0 &&
+                saved.Items.All(existing => existing.EquipmentSlot != item.EquipmentSlot))
+            {
+                saved.Items.Add(CloneItem(item));
+                added = true;
+            }
+        }
+
+        if (added)
+        {
+            this.configuration.IsDirty = true;
+        }
     }
 
     public void DumpDiagnostics()
@@ -1666,12 +1709,98 @@ public sealed class MannequinRestockService : IHostedService
         }
     }
 
-    public unsafe IReadOnlyList<RestockItemPlan> BuildRestockPlan(MannequinConfiguration mannequinConfiguration)
+    /// <summary>
+    /// The user-owned preset rows for the currently open mannequin, ordered by slot.
+    /// </summary>
+    public IReadOnlyList<MannequinItem> GetPresetItems()
     {
-        return mannequinConfiguration.Items
-            .Where(item => item.ItemId != 0 && item.IsSoldOut)
-            .Select(item => new RestockItemPlan(item, this.ResolveRestockSource(item)))
+        var mannequinId = this.CurrentConfiguration?.MannequinId ?? 0;
+        if (mannequinId == 0 ||
+            !this.configuration.MannequinConfigurations.TryGetValue(mannequinId, out var saved))
+        {
+            return [];
+        }
+
+        return saved.Items.OrderBy(item => item.EquipmentSlot).ToArray();
+    }
+
+    /// <summary>
+    /// Whether the preset row's item is currently listed on its slot, judged from
+    /// the cross-checked live capture.
+    /// </summary>
+    public bool IsPresetItemListed(MannequinItem presetItem)
+    {
+        return this.CurrentConfiguration?.Items.Any(
+            item => item.EquipmentSlot == presetItem.EquipmentSlot &&
+                    item.ItemId == presetItem.ItemId &&
+                    !item.IsSoldOut) == true;
+    }
+
+    public IReadOnlyList<RestockItemPlan> BuildRestockPlan()
+    {
+        return this.GetPresetItems()
+            .Where(item => item.ItemId != 0 && !this.IsPresetItemListed(item))
+            .Select(item => new RestockItemPlan(CloneItem(item), this.ResolveRestockSource(item)))
             .ToArray();
+    }
+
+    /// <summary>
+    /// Tradable gear equippable in the given mannequin slot, highest item level
+    /// first, built once per slot from the item sheet.
+    /// </summary>
+    public IReadOnlyList<EquipmentOption> GetEquippableItems(int equipmentSlot)
+    {
+        if (this.equipmentCatalog.TryGetValue(equipmentSlot, out var cached))
+        {
+            return cached;
+        }
+
+        var options = new List<(uint Level, EquipmentOption Option)>();
+        foreach (var row in this.itemSheet)
+        {
+            if (row.RowId == 0 || row.IsUntradable || row.EquipSlotCategory.RowId == 0 ||
+                !MatchesEquipmentSlot(row.EquipSlotCategory.Value, equipmentSlot))
+            {
+                continue;
+            }
+
+            var name = row.Name.ToString();
+            if (name.Length == 0)
+            {
+                continue;
+            }
+
+            var level = row.LevelItem.RowId;
+            options.Add((level, new EquipmentOption(row.RowId, $"{name} (装等{level})", name)));
+        }
+
+        var catalog = options
+            .OrderByDescending(entry => entry.Level)
+            .ThenBy(entry => entry.Option.Name, StringComparer.Ordinal)
+            .Select(entry => entry.Option)
+            .ToList();
+        this.equipmentCatalog[equipmentSlot] = catalog;
+        return catalog;
+    }
+
+    private static bool MatchesEquipmentSlot(EquipSlotCategory category, int equipmentSlot)
+    {
+        return equipmentSlot switch
+        {
+            0 => category.MainHand == 1,
+            1 => category.OffHand == 1,
+            2 => category.Head == 1,
+            3 => category.Body == 1,
+            4 => category.Gloves == 1,
+            5 => category.Legs == 1,
+            6 => category.Feet == 1,
+            7 => category.Ears == 1,
+            8 => category.Neck == 1,
+            9 => category.Wrists == 1,
+            10 => category.FingerR == 1,
+            11 => category.FingerL == 1,
+            _ => false,
+        };
     }
 
     /// <summary>
@@ -2065,6 +2194,12 @@ public enum RestockItemSource
     PlayerInventory,
     RetainerInventory,
 }
+
+/// <summary>
+/// One choice in the panel's equipment dropdown: the label carries the item level
+/// for display, the bare name is what the search box matches against.
+/// </summary>
+public readonly record struct EquipmentOption(uint ItemId, string Label, string Name);
 
 
 /// <summary>

@@ -8,6 +8,17 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2032] - 2026-09-13
+
+### Added
+- The preset panel is now a full preset editor: every mannequin slot has a searchable equipment dropdown (filtered to tradable gear equippable in that slot, highest item level first, with the item level shown), the icon updates to the chosen equipment, and a slot can be cleared from the same dropdown. Empty slots show a "选择装备" picker so gear can be added to unused slots.
+
+### Fixed
+- Panel edits no longer revert within half a second: the saved preset is now user-owned — the periodic capture only fills in slots the preset does not know about yet and never overwrites existing entries — and the panel rows, the restock plan and the status column are all driven by the preset (status compares it against the cross-checked live state).
+
+### Changed
+- Because the preset is now authoritative, repricing an item through the native window no longer updates the preset automatically; edit the price in the panel instead.
+
 ## [1.4.0.2031] - 2026-09-13
 
 ### Fixed
