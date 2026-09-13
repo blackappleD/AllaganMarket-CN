@@ -106,6 +106,7 @@ public sealed class MannequinRestockService : IHostedService
     private long lastCaptureAttemptMilliseconds;
     private long lastAddonSeenMilliseconds;
     private string? lastCaptureSignature;
+    private ulong sessionMannequinId;
     private CancellationTokenSource? restockCancellationTokenSource;
     private List<RestockItemPlan>? restockExecution;
 
@@ -1392,22 +1393,12 @@ public sealed class MannequinRestockService : IHostedService
                     };
 
                     // Sold-out slots lose the HQ flag and the price in the agent data,
-                    // so restore them from the configuration saved while the item was listed.
-                    if (capturedItem.IsSoldOut)
+                    // so restore them from the presets saved while the item was listed.
+                    if (capturedItem.IsSoldOut &&
+                        !this.TryRestoreItemData(saved, capturedItem) &&
+                        capturedItem.UnitPrice == 0)
                     {
-                        var savedItem = saved?.Items.Find(
-                            existing => existing.EquipmentSlot == capturedItem.EquipmentSlot &&
-                                        existing.ItemId == capturedItem.ItemId);
-                        if (savedItem != null)
-                        {
-                            capturedItem.IsHighQuality = savedItem.IsHighQuality;
-                            capturedItem.UnitPrice = savedItem.UnitPrice;
-                        }
-
-                        if (capturedItem.UnitPrice == 0)
-                        {
-                            hasUnknownPrices = true;
-                        }
+                        hasUnknownPrices = true;
                     }
 
                     captured.Items.Add(capturedItem);
@@ -1422,7 +1413,7 @@ public sealed class MannequinRestockService : IHostedService
                     {
                         var restoredItem = CloneItem(savedItem);
                         restoredItem.IsSoldOut = true;
-                        if (restoredItem.UnitPrice == 0)
+                        if (restoredItem.UnitPrice == 0 && !this.TryRestoreItemData(saved, restoredItem))
                         {
                             hasUnknownPrices = true;
                         }
@@ -1495,7 +1486,63 @@ public sealed class MannequinRestockService : IHostedService
 
     private ulong GetCurrentMannequinId()
     {
-        return this.targetManager.Target?.GameObjectId ?? (ulong)this.MannequinAddonAddress;
+        // The preset is keyed by this id, so it must not drift while the window
+        // is open — a target change mid-session would silently re-key the preset.
+        // Resolve it once per window session and freeze it. The interaction
+        // target is preferred; the addon address changes between opens and is
+        // only a last resort (TryRestoreItemData recovers prices across ids).
+        if (this.sessionMannequinId == 0)
+        {
+            this.sessionMannequinId = this.targetManager.Target?.GameObjectId ?? (ulong)this.MannequinAddonAddress;
+        }
+
+        return this.sessionMannequinId;
+    }
+
+    /// <summary>
+    /// Restores a slot's price and HQ flag from the saved presets after the game
+    /// dropped them (sold-out slots lose both in the agent data). The current
+    /// mannequin's preset is preferred, but the mannequin id is not fully stable
+    /// (it comes from the interaction target, which can differ between opens),
+    /// so every saved preset is searched — the recorded price of the same item
+    /// on the same slot is correct no matter which id it was saved under.
+    /// </summary>
+    private bool TryRestoreItemData(MannequinConfiguration? saved, MannequinItem item)
+    {
+        var restored = FindSavedItem(saved, item)
+                       ?? this.configuration.MannequinConfigurations.Values
+                           .Where(config => !ReferenceEquals(config, saved))
+                           .Select(config => FindSavedItem(config, item))
+                           .FirstOrDefault(match => match != null);
+        if (restored == null)
+        {
+            return false;
+        }
+
+        item.IsHighQuality = restored.IsHighQuality;
+        item.UnitPrice = restored.UnitPrice;
+
+        // Write the recovered values back into the current preset so the panel
+        // row shows them. Only rows without a price are touched — 0 is never a
+        // deliberate price, so this cannot overwrite a user edit.
+        var currentRow = saved?.Items.Find(
+            existing => existing.EquipmentSlot == item.EquipmentSlot && existing.ItemId == item.ItemId);
+        if (currentRow != null && currentRow.UnitPrice == 0)
+        {
+            currentRow.IsHighQuality = restored.IsHighQuality;
+            currentRow.UnitPrice = restored.UnitPrice;
+            this.configuration.IsDirty = true;
+        }
+
+        return true;
+    }
+
+    private static MannequinItem? FindSavedItem(MannequinConfiguration? config, MannequinItem item)
+    {
+        return config?.Items.Find(
+            existing => existing.EquipmentSlot == item.EquipmentSlot &&
+                        existing.ItemId == item.ItemId &&
+                        existing.UnitPrice != 0);
     }
 
     private static MannequinItem CloneItem(MannequinItem item)
@@ -1614,20 +1661,9 @@ public sealed class MannequinRestockService : IHostedService
             foreach (var item in group.OrderByDescending(entry => entry.EquipmentSlot).Take(missing))
             {
                 item.IsSoldOut = true;
-                if (item.UnitPrice == 0)
+                if (item.UnitPrice == 0 && !this.TryRestoreItemData(saved, item))
                 {
-                    var savedItem = saved?.Items.Find(
-                        existing => existing.EquipmentSlot == item.EquipmentSlot && existing.ItemId == item.ItemId);
-                    if (savedItem != null)
-                    {
-                        item.IsHighQuality = savedItem.IsHighQuality;
-                        item.UnitPrice = savedItem.UnitPrice;
-                    }
-
-                    if (item.UnitPrice == 0)
-                    {
-                        hasUnknownPrices = true;
-                    }
+                    hasUnknownPrices = true;
                 }
             }
         }
@@ -1923,6 +1959,7 @@ public sealed class MannequinRestockService : IHostedService
                 this.MannequinAddonName = args.AddonName;
                 this.MannequinAddonAddress = args.Addon.Address;
                 this.CurrentConfiguration = null;
+                this.sessionMannequinId = 0;
                 this.StatusMessage = $"已识别模特窗口：{args.AddonName}。等待配置采集。";
                 this.LogAddonSummary((AtkUnitBase*)args.Addon.Address);
                 this.StateChanged?.Invoke();
@@ -2027,6 +2064,7 @@ public sealed class MannequinRestockService : IHostedService
                 this.MannequinAddonName = null;
                 this.CurrentConfiguration = null;
                 this.lastCaptureSignature = null;
+                this.sessionMannequinId = 0;
                 this.StatusMessage = "等待打开服装模特商店设定。";
                 this.StateChanged?.Invoke();
             }
@@ -2055,6 +2093,7 @@ public sealed class MannequinRestockService : IHostedService
         this.MannequinAddonName = MannequinAddonNameValue;
         this.MannequinAddonAddress = addonAddress.Address;
         this.CurrentConfiguration = null;
+        this.sessionMannequinId = 0;
         this.StatusMessage = $"已识别模特窗口：{MannequinAddonNameValue}。等待配置采集。";
         this.LogAddonSummary(addon);
         this.TryCaptureCurrentConfiguration();
@@ -2074,6 +2113,7 @@ public sealed class MannequinRestockService : IHostedService
         this.MannequinAddonAddress = IntPtr.Zero;
         this.CurrentConfiguration = null;
         this.lastCaptureSignature = null;
+        this.sessionMannequinId = 0;
         this.StatusMessage = "等待打开服装模特商店设定。";
         this.StateChanged?.Invoke();
     }

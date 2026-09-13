@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2033] - 2026-09-13
+
+### Fixed
+- Preset prices and HQ flags no longer vanish after a sale: the preset is keyed by a mannequin id derived from the interaction target (falling back to the window address), and that id could differ between opens — reopening the shop then created a fresh preset from the sold-out agent data, which the game strips of price and HQ. The id is now resolved once per window session and frozen, and when a slot's price is unknown it is recovered from every saved preset by slot + item id and written back into the current preset (only rows without a price are filled, so user edits are never overwritten). This also repairs presets that already lost their prices to this bug, as long as the original entry still exists under the old id.
+
 ## [1.4.0.2032] - 2026-09-13
 
 ### Added
