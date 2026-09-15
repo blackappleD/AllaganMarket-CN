@@ -206,7 +206,7 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         ImGui.TableSetupColumn("##icon", ImGuiTableColumnFlags.WidthFixed, IconSize);
         ImGui.TableSetupColumn("装备", ImGuiTableColumnFlags.WidthFixed, 190);
         ImGui.TableSetupColumn("价格", ImGuiTableColumnFlags.WidthFixed, PriceInputWidth + 70);
-        ImGui.TableSetupColumn("状态", ImGuiTableColumnFlags.WidthFixed, 60);
+        ImGui.TableSetupColumn("状态", ImGuiTableColumnFlags.WidthFixed, 80);
         ImGui.TableHeadersRow();
 
         var presetItems = this.restockService.GetPresetItems();
@@ -371,10 +371,13 @@ public sealed class MannequinRestockWindow : ExtendedWindow
                 ImGui.TextColored(ImGuiColors.DalamudYellow, "可补货");
                 break;
             case RestockItemSource.RetainerInventory:
-                ImGui.TextColored(ImGuiColors.DalamudOrange, "在雇员");
+                var retainerCount = this.restockService.CountRetainerInventoryItems(item);
+                ImGui.TextColored(
+                    ImGuiColors.DalamudOrange,
+                    retainerCount > 1 ? $"在雇员 x{retainerCount}" : "在雇员");
                 if (ImGui.IsItemHovered())
                 {
-                    ImGui.SetTooltip("装备在雇员背包中，补货时会自动切换到装备选择窗口的雇员标签上架。");
+                    ImGui.SetTooltip($"当前雇员背包中有 {Math.Max(retainerCount, 1)} 件该装备，补货时会自动切换到装备选择窗口的雇员标签上架。");
                 }
 
                 break;

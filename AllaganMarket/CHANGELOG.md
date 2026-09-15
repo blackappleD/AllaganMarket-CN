@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2034] - 2026-09-13
+
+### Added
+- The 在雇员 status in the preset panel now shows how many copies of the equipment the current retainer stores (e.g. 在雇员 x2) when there is more than one, matched the same way the restock source is resolved; the tooltip carries the exact count.
+
 ## [1.4.0.2033] - 2026-09-13
 
 ### Fixed

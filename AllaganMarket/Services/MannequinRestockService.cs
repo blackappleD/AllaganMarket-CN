@@ -1914,6 +1914,53 @@ public sealed class MannequinRestockService : IHostedService
         return null;
     }
 
+    /// <summary>
+    /// How many copies of the preset item the current retainer stores, matched
+    /// the same way <see cref="ResolveRestockSource"/> matches: exact quality
+    /// first, any quality as the fallback when the price is known.
+    /// </summary>
+    public unsafe int CountRetainerInventoryItems(MannequinItem item)
+    {
+        var count = this.CountRetainerInventoryItems(item, true);
+        if (count == 0 && item.UnitPrice != 0)
+        {
+            count = this.CountRetainerInventoryItems(item, false);
+        }
+
+        return count;
+    }
+
+    private unsafe int CountRetainerInventoryItems(MannequinItem item, bool matchQuality)
+    {
+        if (this.retainerService.RetainerId == 0)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        for (var inventoryType = InventoryType.RetainerPage1; inventoryType <= InventoryType.RetainerPage7; inventoryType++)
+        {
+            var container = this.inventoryService.GetInventoryContainer(inventoryType);
+            if (container == null || !container->IsLoaded)
+            {
+                continue;
+            }
+
+            for (var index = 0; index < container->Size; index++)
+            {
+                var inventoryItem = &container->Items[index];
+                if (inventoryItem->ItemId == item.ItemId &&
+                    (!matchQuality ||
+                     inventoryItem->Flags.HasFlag(InventoryItem.ItemFlags.HighQuality) == item.IsHighQuality))
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
     private unsafe InventoryItem* FindRetainerInventoryItem(MannequinItem item, bool matchQuality)
     {
         if (this.retainerService.RetainerId == 0)
