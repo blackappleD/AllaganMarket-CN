@@ -41,6 +41,7 @@ public sealed class MannequinRestockService : IHostedService
 
     private const string SellAsSetSettingKey = "MannequinRestockSellAsSet";
     private const string ConfirmOnFinishSettingKey = "MannequinRestockConfirmOnFinish";
+    private const string PresetsDeduplicatedSettingKey = "MannequinPresetsDeduplicated";
 
     // MerchantSetting callbacks (verified against the native flow):
     // 11 = 确定 (commit and close), 12 = list equipment in slot,
@@ -89,7 +90,6 @@ public sealed class MannequinRestockService : IHostedService
     private readonly IAddonLifecycle addonLifecycle;
     private readonly IFramework framework;
     private readonly IGameGui gameGui;
-    private readonly ITargetManager targetManager;
     private readonly IInventoryService inventoryService;
     private readonly IRetainerService retainerService;
     private readonly IPluginLog pluginLog;
@@ -106,7 +106,8 @@ public sealed class MannequinRestockService : IHostedService
     private long lastCaptureAttemptMilliseconds;
     private long lastAddonSeenMilliseconds;
     private string? lastCaptureSignature;
-    private ulong sessionMannequinId;
+    private ulong sessionPresetId;
+    private bool presetSelectedManually;
     private CancellationTokenSource? restockCancellationTokenSource;
     private List<RestockItemPlan>? restockExecution;
 
@@ -114,7 +115,6 @@ public sealed class MannequinRestockService : IHostedService
         IAddonLifecycle addonLifecycle,
         IFramework framework,
         IGameGui gameGui,
-        ITargetManager targetManager,
         IInventoryService inventoryService,
         IRetainerService retainerService,
         IPluginLog pluginLog,
@@ -124,7 +124,6 @@ public sealed class MannequinRestockService : IHostedService
         this.addonLifecycle = addonLifecycle;
         this.framework = framework;
         this.gameGui = gameGui;
-        this.targetManager = targetManager;
         this.inventoryService = inventoryService;
         this.retainerService = retainerService;
         this.pluginLog = pluginLog;
@@ -139,6 +138,21 @@ public sealed class MannequinRestockService : IHostedService
     public nint MannequinAddonAddress { get; private set; }
 
     public MannequinConfiguration? CurrentConfiguration { get; private set; }
+
+    /// <summary>
+    /// Gets the presets that match the open mannequin's gear equally well, when the
+    /// match is too ambiguous to pick one automatically; the user chooses instead.
+    /// </summary>
+    public IReadOnlyList<ulong> AmbiguousPresetIds { get; private set; } = [];
+
+    /// <summary>
+    /// Gets the saved preset the open mannequin is using, or null while none is chosen.
+    /// </summary>
+    public MannequinConfiguration? CurrentPreset =>
+        this.CurrentConfiguration != null &&
+        this.configuration.MannequinConfigurations.TryGetValue(this.CurrentConfiguration.MannequinId, out var preset)
+            ? preset
+            : null;
 
     public string StatusMessage { get; private set; } = "等待打开服装模特商店设定。";
 
@@ -175,6 +189,7 @@ public sealed class MannequinRestockService : IHostedService
         this.addonLifecycle.RegisterListener(AddonEvent.PreFinalize, MannequinAddonNameValue, this.OnAnyAddonFinalized);
         this.framework.Update += this.OnFrameworkUpdate;
         this.pluginLog.Information("[MannequinDiag] service started; target addon={AddonName}.", MannequinAddonNameValue);
+        this.DeduplicatePresets();
         this.RefreshMannequinAddon();
 
         return Task.CompletedTask;
@@ -212,6 +227,13 @@ public sealed class MannequinRestockService : IHostedService
         if (this.CurrentConfiguration == null || this.CurrentConfiguration.Items.Count == 0)
         {
             this.TryCaptureCurrentConfiguration();
+        }
+
+        if (this.CurrentConfiguration != null && this.CurrentConfiguration.MannequinId == 0)
+        {
+            this.StatusMessage = "未匹配到预设，请先在面板上选择或新建预设。";
+            this.StateChanged?.Invoke();
+            return;
         }
 
         if (this.CurrentConfiguration == null || this.CurrentConfiguration.Items.Count == 0)
@@ -274,6 +296,7 @@ public sealed class MannequinRestockService : IHostedService
     private async Task ExecuteRestockAsync(List<RestockItemPlan> execution, CancellationToken cancellationToken)
     {
         var restockedCount = 0;
+        var alreadyListedCount = 0;
         var failedCount = 0;
         try
         {
@@ -302,8 +325,14 @@ public sealed class MannequinRestockService : IHostedService
                 this.StateChanged?.Invoke();
                 try
                 {
-                    await this.RestockPlayerInventoryItemAsync(plan.Item, plan.Source, cancellationToken);
-                    restockedCount++;
+                    if (await this.RestockPlayerInventoryItemAsync(plan.Item, plan.Source, cancellationToken))
+                    {
+                        restockedCount++;
+                    }
+                    else
+                    {
+                        alreadyListedCount++;
+                    }
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -331,14 +360,20 @@ public sealed class MannequinRestockService : IHostedService
             this.StatusMessage = restockedCount > 0
                 ? $"补货完成：已重新上架 {restockedCount}/{execution.Count} 个装备。"
                 : "补货结束：没有可以重新上架的装备（缺失、价格未知或在雇员中）。";
+            if (alreadyListedCount > 0)
+            {
+                this.StatusMessage += $" {alreadyListedCount} 个槽位已在售，已跳过。";
+            }
+
             if (failedCount > 0)
             {
                 this.StatusMessage += $" {failedCount} 个装备失败，请查看日志。";
             }
 
             this.pluginLog.Information(
-                "[MannequinRestock] execution completed; restocked={Restocked}; failed={Failed}; planned={Count}.",
+                "[MannequinRestock] execution completed; restocked={Restocked}; alreadyListed={AlreadyListed}; failed={Failed}; planned={Count}.",
                 restockedCount,
+                alreadyListedCount,
                 failedCount,
                 execution.Count);
             this.StateChanged?.Invoke();
@@ -431,10 +466,33 @@ public sealed class MannequinRestockService : IHostedService
         return false;
     }
 
-    private async Task RestockPlayerInventoryItemAsync(MannequinItem item, RestockItemSource source, CancellationToken cancellationToken)
+    /// <summary>
+    /// Relists one preset item. Returns false (without touching the slot) when the
+    /// slot turns out to still hold a listed item.
+    /// </summary>
+    private async Task<bool> RestockPlayerInventoryItemAsync(MannequinItem item, RestockItemSource source, CancellationToken cancellationToken)
     {
         var slot = (uint)item.EquipmentSlot;
         await this.WaitForAddonAsync(MannequinAddonNameValue, cancellationToken);
+
+        // 0. The plan was built from a capture taken before the run; re-read the
+        //    live window so a slot that is (still) listed is never opened.
+        var listedItem = await this.framework.RunOnFrameworkThread(() =>
+        {
+            // The capture rewrites the status line; keep the "正在补货" message.
+            var statusMessage = this.StatusMessage;
+            this.TryCaptureCurrentConfiguration();
+            this.StatusMessage = statusMessage;
+            return this.GetListedItemInSlot(item.EquipmentSlot);
+        });
+        if (listedItem != null)
+        {
+            this.pluginLog.Information(
+                "[MannequinRestock] slot={Slot}; listed item={ListedItemId}; slot is occupied, skipping.",
+                item.EquipmentSlot,
+                listedItem.ItemId);
+            return false;
+        }
 
         // 1. Take the sold-out entry off the slot. An occupied slot opens a
         //    context menu; "收回" asks for confirmation, "移除已售罄商品" does not.
@@ -470,9 +528,19 @@ public sealed class MannequinRestockService : IHostedService
                 slotAvailability);
         }
 
-        // 2. Open the equipment picker for the now empty slot.
+        // 2. Open the equipment picker for the now empty slot. An occupied slot
+        //    raises "take the item off the mannequin?" instead; answer 否 and
+        //    leave the slot as it is.
         await this.FireCallbackAsync(MannequinAddonNameValue, cancellationToken, MerchantSettingListSlotCallback, slot);
-        await this.WaitForAddonAsync("MerchantEquipSelect", cancellationToken);
+        if (await this.WaitForPickerOrTakeDownPromptAsync(cancellationToken))
+        {
+            this.pluginLog.Information(
+                "[MannequinRestock] slot={Slot}; the game asked to take the slot's item down; declined and skipping.",
+                item.EquipmentSlot);
+            await this.FireCallbackAsync("SelectYesno", cancellationToken, 1);
+            await this.WaitUntilAddonGoneAsync("SelectYesno", cancellationToken);
+            return false;
+        }
 
         // 3. Pick the item. Gear stored on the retainer only shows on the picker's
         //    retainer tab, so switch there first when that is where the item is;
@@ -534,6 +602,33 @@ public sealed class MannequinRestockService : IHostedService
                 item.EquipmentSlot,
                 item.ItemId);
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Waits for whichever the slot click produced: the equipment picker (false)
+    /// or the take-down confirmation raised for an occupied slot (true).
+    /// </summary>
+    private async Task<bool> WaitForPickerOrTakeDownPromptAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await this.IsAddonReadyAsync("MerchantEquipSelect"))
+            {
+                return false;
+            }
+
+            if (await this.IsAddonReadyAsync("SelectYesno"))
+            {
+                return true;
+            }
+
+            await Task.Delay(PollIntervalMilliseconds, cancellationToken);
+        }
+
+        throw new TimeoutException("等待窗口 MerchantEquipSelect 超时。");
     }
 
     /// <summary>
@@ -1367,7 +1462,19 @@ public sealed class MannequinRestockService : IHostedService
                 return false;
             }
 
-            var mannequinId = this.GetCurrentMannequinId();
+            var liveItems = new List<(int Slot, uint ItemId)>();
+            var liveSlot = 0;
+            foreach (var item in agentInfo->ItemsSpan)
+            {
+                if (item.ItemId != 0)
+                {
+                    liveItems.Add((liveSlot, item.ItemId));
+                }
+
+                liveSlot++;
+            }
+
+            var mannequinId = this.ResolvePresetId(liveItems);
             this.configuration.MannequinConfigurations.TryGetValue(mannequinId, out var saved);
             var captured = new MannequinConfiguration
             {
@@ -1432,7 +1539,7 @@ public sealed class MannequinRestockService : IHostedService
             // item are downgraded to needing restock.
             this.ApplyNativeWindowCrossCheck(captured, saved, ref hasUnknownPrices);
 
-            var signature = $"{mannequinId};" + string.Join(
+            var signature = $"{mannequinId};{this.AmbiguousPresetIds.Count};" + string.Join(
                 ",",
                 captured.Items.Select(item => $"{item.EquipmentSlot}:{item.ItemId}:{item.IsHighQuality}:{item.UnitPrice}:{item.IsSoldOut}"));
             if (signature == this.lastCaptureSignature && this.CurrentConfiguration != null)
@@ -1464,13 +1571,19 @@ public sealed class MannequinRestockService : IHostedService
             }
 
             var soldOutCount = captured.Items.Count(item => item.IsSoldOut);
-            this.StatusMessage = captured.Items.Count == 0
+            this.StatusMessage = mannequinId == 0
+                ? this.AmbiguousPresetIds.Count > 0
+                    ? $"有 {this.AmbiguousPresetIds.Count} 个预设同样匹配当前模特的装备，请在下方手动选择。"
+                    : liveItems.Count > 0
+                        ? "未选择预设，请在下方选择或新建预设。"
+                        : "模特上没有装备，无法自动匹配预设；请在下方选择或新建预设。"
+                : captured.Items.Count == 0
                 ? "已读取模特配置：没有检测到装备。"
                 : hasUnknownPrices
                     ? $"已读取模特配置：{captured.Items.Count} 个槽位，{soldOutCount} 个售罄；部分售罄装备价格未知（售出前未记录），将跳过。"
                     : $"已读取模特配置：{captured.Items.Count} 个槽位，{soldOutCount} 个售罄。";
             this.pluginLog.Information(
-                "[MannequinDiag] captured mannequin configuration; mannequinId={MannequinId}; items={ItemCount}; soldOut={SoldOutCount}.",
+                "[MannequinDiag] captured mannequin configuration; preset={PresetId}; items={ItemCount}; soldOut={SoldOutCount}.",
                 captured.MannequinId,
                 captured.Items.Count,
                 soldOutCount);
@@ -1484,28 +1597,240 @@ public sealed class MannequinRestockService : IHostedService
         }
     }
 
-    private ulong GetCurrentMannequinId()
+    /// <summary>
+    /// Picks the preset for the open mannequin by the gear it carries: the preset
+    /// sharing the most slot/item pairs wins, fewer conflicting slots breaking ties.
+    /// Sold-out slots keep their item id in the agent data, so a mannequin is still
+    /// recognised after its gear sold. A preset that conflicts on at least as many
+    /// slots as it matches belongs to another mannequin; gear that no preset matches
+    /// gets a new preset. The current preset is kept while it is among the best
+    /// matches, and nothing is re-resolved during a run or after a manual pick.
+    /// </summary>
+    private ulong ResolvePresetId(IReadOnlyList<(int Slot, uint ItemId)> liveItems)
     {
-        // The preset is keyed by this id, so it must not drift while the window
-        // is open — a target change mid-session would silently re-key the preset.
-        // Resolve it once per window session and freeze it. The interaction
-        // target is preferred; the addon address changes between opens and is
-        // only a last resort (TryRestoreItemData recovers prices across ids).
-        if (this.sessionMannequinId == 0)
+        var presets = this.configuration.MannequinConfigurations;
+        if (this.sessionPresetId != 0 && !presets.ContainsKey(this.sessionPresetId))
         {
-            this.sessionMannequinId = this.targetManager.Target?.GameObjectId ?? (ulong)this.MannequinAddonAddress;
+            this.ResetPresetSession();
         }
 
-        return this.sessionMannequinId;
+        if (this.IsRestocking || this.presetSelectedManually || liveItems.Count == 0)
+        {
+            return this.sessionPresetId;
+        }
+
+        var ranked = presets.Values
+            .Select(preset =>
+            {
+                var matches = 0;
+                var conflicts = 0;
+                foreach (var (slot, itemId) in liveItems)
+                {
+                    var presetItemId = preset.Items.Find(item => item.EquipmentSlot == slot)?.ItemId ?? 0;
+                    if (presetItemId == itemId)
+                    {
+                        matches++;
+                    }
+                    else if (presetItemId != 0)
+                    {
+                        conflicts++;
+                    }
+                }
+
+                return (Preset: preset, Matches: matches, Conflicts: conflicts);
+            })
+            .Where(entry => entry.Matches > entry.Conflicts)
+            .ToList();
+
+        if (ranked.Count == 0)
+        {
+            var created = this.AddPreset();
+            this.pluginLog.Information(
+                "[MannequinDiag] no preset matches the mannequin's gear; created preset={PresetId}.",
+                created.MannequinId);
+            this.AmbiguousPresetIds = [];
+            this.sessionPresetId = created.MannequinId;
+            return this.sessionPresetId;
+        }
+
+        var bestMatches = ranked.Max(entry => entry.Matches);
+        var bestConflicts = ranked.Where(entry => entry.Matches == bestMatches).Min(entry => entry.Conflicts);
+        var best = ranked
+            .Where(entry => entry.Matches == bestMatches && entry.Conflicts == bestConflicts)
+            .Select(entry => entry.Preset.MannequinId)
+            .ToArray();
+        if (best.Contains(this.sessionPresetId))
+        {
+            this.AmbiguousPresetIds = [];
+            return this.sessionPresetId;
+        }
+
+        if (best.Length > 1)
+        {
+            this.AmbiguousPresetIds = best;
+            this.sessionPresetId = 0;
+            return 0;
+        }
+
+        this.AmbiguousPresetIds = [];
+        this.sessionPresetId = best[0];
+        return this.sessionPresetId;
+    }
+
+    private void ResetPresetSession()
+    {
+        this.sessionPresetId = 0;
+        this.presetSelectedManually = false;
+        this.AmbiguousPresetIds = [];
+    }
+
+    private MannequinConfiguration AddPreset()
+    {
+        var presets = this.configuration.MannequinConfigurations;
+        var preset = new MannequinConfiguration
+        {
+            MannequinId = presets.Count == 0 ? 1 : presets.Keys.Max() + 1,
+            RetainerId = this.retainerService.RetainerId,
+        };
+        presets[preset.MannequinId] = preset;
+        this.configuration.IsDirty = true;
+        return preset;
+    }
+
+    /// <summary>
+    /// Presets used to be keyed by the mannequin's game object id, which changes on
+    /// every zone load, so each gear set piled up many copies. Keeps one preset per
+    /// gear set — the last one, as later entries were saved later. Runs once.
+    /// </summary>
+    private void DeduplicatePresets()
+    {
+        if (this.configuration.BooleanSettings.TryGetValue(PresetsDeduplicatedSettingKey, out var done) && done)
+        {
+            return;
+        }
+
+        var presets = this.configuration.MannequinConfigurations;
+        var keptByGear = new Dictionary<string, ulong>();
+        var before = presets.Count;
+        foreach (var (id, preset) in presets.ToList())
+        {
+            var gear = string.Join(
+                ",",
+                preset.Items.Where(item => item.ItemId != 0)
+                    .OrderBy(item => item.EquipmentSlot)
+                    .Select(item => $"{item.EquipmentSlot}:{item.ItemId}"));
+            if (gear.Length == 0 && string.IsNullOrEmpty(preset.Name))
+            {
+                presets.Remove(id);
+                continue;
+            }
+
+            if (keptByGear.TryGetValue(gear, out var previousId))
+            {
+                presets.Remove(previousId);
+            }
+
+            keptByGear[gear] = id;
+        }
+
+        this.configuration.Set(PresetsDeduplicatedSettingKey, true);
+        this.pluginLog.Information(
+            "[MannequinDiag] deduplicated mannequin presets; before={Before}; after={After}.",
+            before,
+            presets.Count);
+    }
+
+    public IReadOnlyList<MannequinConfiguration> GetPresets()
+    {
+        return this.configuration.MannequinConfigurations.Values
+            .OrderBy(this.GetPresetDisplayName, StringComparer.CurrentCulture)
+            .ToArray();
+    }
+
+    public string GetPresetDisplayName(MannequinConfiguration preset)
+    {
+        if (!string.IsNullOrWhiteSpace(preset.Name))
+        {
+            return preset.Name;
+        }
+
+        var firstItem = preset.Items.Where(item => item.ItemId != 0).MinBy(item => item.EquipmentSlot);
+        return firstItem != null ? this.GetItemName(firstItem.ItemId) : "空预设";
+    }
+
+    /// <summary>
+    /// Uses the given preset for the open mannequin until the window closes; the
+    /// automatic gear matching no longer overrides it.
+    /// </summary>
+    public void SelectPreset(ulong presetId)
+    {
+        if (this.IsRestocking || !this.configuration.MannequinConfigurations.ContainsKey(presetId))
+        {
+            return;
+        }
+
+        this.sessionPresetId = presetId;
+        this.presetSelectedManually = true;
+        this.AmbiguousPresetIds = [];
+        this.lastCaptureSignature = null;
+        this.TryCaptureCurrentConfiguration();
+    }
+
+    public void CreatePreset()
+    {
+        if (this.IsRestocking)
+        {
+            return;
+        }
+
+        var preset = this.AddPreset();
+        this.pluginLog.Information("[MannequinDiag] created preset={PresetId} from the panel.", preset.MannequinId);
+        this.SelectPreset(preset.MannequinId);
+    }
+
+    public void RenameCurrentPreset(string name)
+    {
+        var preset = this.CurrentPreset;
+        if (preset == null || this.IsRestocking)
+        {
+            return;
+        }
+
+        preset.Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        this.configuration.IsDirty = true;
+        this.StateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Deletes the preset the open mannequin is using. Automatic matching stays off
+    /// until the window closes, otherwise the gear still on the mannequin would
+    /// immediately recreate the preset that was just deleted.
+    /// </summary>
+    public void DeleteCurrentPreset()
+    {
+        var preset = this.CurrentPreset;
+        if (preset == null || this.IsRestocking)
+        {
+            return;
+        }
+
+        this.configuration.MannequinConfigurations.Remove(preset.MannequinId);
+        this.configuration.IsDirty = true;
+        this.pluginLog.Information("[MannequinDiag] deleted preset={PresetId} from the panel.", preset.MannequinId);
+
+        this.sessionPresetId = 0;
+        this.presetSelectedManually = true;
+        this.AmbiguousPresetIds = [];
+        this.lastCaptureSignature = null;
+        this.TryCaptureCurrentConfiguration();
     }
 
     /// <summary>
     /// Restores a slot's price and HQ flag from the saved presets after the game
     /// dropped them (sold-out slots lose both in the agent data). The current
-    /// mannequin's preset is preferred, but the mannequin id is not fully stable
-    /// (it comes from the interaction target, which can differ between opens),
-    /// so every saved preset is searched — the recorded price of the same item
-    /// on the same slot is correct no matter which id it was saved under.
+    /// preset is preferred, then every other preset is searched — mannequins
+    /// often share pieces (e.g. accessories), and the recorded price of the same
+    /// item on the same slot applies no matter which preset recorded it.
     /// </summary>
     private bool TryRestoreItemData(MannequinConfiguration? saved, MannequinItem item)
     {
@@ -1766,16 +2091,27 @@ public sealed class MannequinRestockService : IHostedService
     /// </summary>
     public bool IsPresetItemListed(MannequinItem presetItem)
     {
-        return this.CurrentConfiguration?.Items.Any(
-            item => item.EquipmentSlot == presetItem.EquipmentSlot &&
-                    item.ItemId == presetItem.ItemId &&
-                    !item.IsSoldOut) == true;
+        return this.GetListedItemInSlot(presetItem.EquipmentSlot)?.ItemId == presetItem.ItemId;
+    }
+
+    /// <summary>
+    /// The item currently listed on the slot (whatever it is), judged from the
+    /// cross-checked live capture; null when the slot is empty or sold out.
+    /// </summary>
+    public MannequinItem? GetListedItemInSlot(int equipmentSlot)
+    {
+        return this.CurrentConfiguration?.Items.Find(
+            item => item.EquipmentSlot == equipmentSlot && item.ItemId != 0 && !item.IsSoldOut);
     }
 
     public IReadOnlyList<RestockItemPlan> BuildRestockPlan()
     {
+        // Only slots that are actually empty or sold out are restocked. A slot
+        // that still holds a listed item is left alone even when it differs from
+        // the preset: opening an occupied slot makes the game ask to take the
+        // item down, which is never what a restock should do.
         return this.GetPresetItems()
-            .Where(item => item.ItemId != 0 && !this.IsPresetItemListed(item))
+            .Where(item => item.ItemId != 0 && this.GetListedItemInSlot(item.EquipmentSlot) == null)
             .Select(item => new RestockItemPlan(CloneItem(item), this.ResolveRestockSource(item)))
             .ToArray();
     }
@@ -2006,7 +2342,7 @@ public sealed class MannequinRestockService : IHostedService
                 this.MannequinAddonName = args.AddonName;
                 this.MannequinAddonAddress = args.Addon.Address;
                 this.CurrentConfiguration = null;
-                this.sessionMannequinId = 0;
+                this.ResetPresetSession();
                 this.StatusMessage = $"已识别模特窗口：{args.AddonName}。等待配置采集。";
                 this.LogAddonSummary((AtkUnitBase*)args.Addon.Address);
                 this.StateChanged?.Invoke();
@@ -2111,7 +2447,7 @@ public sealed class MannequinRestockService : IHostedService
                 this.MannequinAddonName = null;
                 this.CurrentConfiguration = null;
                 this.lastCaptureSignature = null;
-                this.sessionMannequinId = 0;
+                this.ResetPresetSession();
                 this.StatusMessage = "等待打开服装模特商店设定。";
                 this.StateChanged?.Invoke();
             }
@@ -2140,7 +2476,7 @@ public sealed class MannequinRestockService : IHostedService
         this.MannequinAddonName = MannequinAddonNameValue;
         this.MannequinAddonAddress = addonAddress.Address;
         this.CurrentConfiguration = null;
-        this.sessionMannequinId = 0;
+        this.ResetPresetSession();
         this.StatusMessage = $"已识别模特窗口：{MannequinAddonNameValue}。等待配置采集。";
         this.LogAddonSummary(addon);
         this.TryCaptureCurrentConfiguration();
@@ -2160,7 +2496,7 @@ public sealed class MannequinRestockService : IHostedService
         this.MannequinAddonAddress = IntPtr.Zero;
         this.CurrentConfiguration = null;
         this.lastCaptureSignature = null;
-        this.sessionMannequinId = 0;
+        this.ResetPresetSession();
         this.StatusMessage = "等待打开服装模特商店设定。";
         this.StateChanged?.Invoke();
     }

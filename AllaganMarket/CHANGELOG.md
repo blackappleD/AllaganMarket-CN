@@ -8,6 +8,15 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2035] - 2026-10-01
+
+### Fixed
+- One-click restock only touches slots that are missing gear. Slots that already carry listed gear are skipped (the equipment picker is never opened on them), and if the game still raises the take-down prompt it is declined and the slot skipped, instead of every slot timing out.
+- Presets are matched to the open mannequin by the gear on its slots instead of the mannequin's game object id, which changed on every zone load and piled up duplicate presets. The preset sharing the most slot/item pairs wins; equally good matches are left for the user to pick. Existing duplicate presets are merged once on startup.
+
+### Added
+- A preset selector in the restock panel: switch presets manually, create a new one (needed when the mannequin carries no gear), rename it (an unnamed preset shows its first item's name) and delete it after confirmation.
+
 ## [1.4.0.2034] - 2026-09-13
 
 ### Added

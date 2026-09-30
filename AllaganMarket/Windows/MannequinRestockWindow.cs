@@ -40,6 +40,8 @@ public sealed class MannequinRestockWindow : ExtendedWindow
     private readonly IFont font;
     private Vector2 lastWindowSize;
     private string equipmentSearchText = string.Empty;
+    private string presetNameBuffer = string.Empty;
+    private ulong presetNameBufferId;
 
     public MannequinRestockWindow(
         MediatorService mediator,
@@ -120,8 +122,109 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         }
 
         ImGui.Separator();
+        this.DrawPresetSelector();
         this.DrawOptions();
         this.DrawSlotTable();
+    }
+
+    private void DrawPresetSelector()
+    {
+        using var disabled = ImRaii.Disabled(this.restockService.IsRestocking);
+        var current = this.restockService.CurrentPreset;
+        var ambiguous = this.restockService.AmbiguousPresetIds;
+
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextUnformatted("预设");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(200);
+        var label = current != null
+            ? this.restockService.GetPresetDisplayName(current)
+            : ambiguous.Count > 0 ? "多个预设匹配，请选择…" : "未匹配，请选择或新建…";
+        using (var combo = ImRaii.Combo("##preset", label, ImGuiComboFlags.HeightLarge))
+        {
+            if (combo)
+            {
+                if (ImGui.Selectable("＋ 新建预设"))
+                {
+                    this.restockService.CreatePreset();
+                }
+
+                ImGui.Separator();
+
+                // Presets that match the mannequin equally well are listed first.
+                foreach (var preset in this.restockService.GetPresets()
+                             .OrderByDescending(preset => ambiguous.Contains(preset.MannequinId)))
+                {
+                    var itemCount = preset.Items.Count(item => item.ItemId != 0);
+                    var suffix = ambiguous.Contains(preset.MannequinId) ? " · 匹配" : string.Empty;
+                    if (ImGui.Selectable(
+                            $"{this.restockService.GetPresetDisplayName(preset)} ({itemCount} 件){suffix}##preset{preset.MannequinId}",
+                            preset == current))
+                    {
+                        this.restockService.SelectPreset(preset.MannequinId);
+                    }
+                }
+            }
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("根据模特身上的装备自动匹配预设；也可以手动切换或新建。手动选择在关闭模特窗口前有效。");
+        }
+
+        if (current == null)
+        {
+            return;
+        }
+
+        if (this.presetNameBufferId != current.MannequinId)
+        {
+            this.presetNameBufferId = current.MannequinId;
+            this.presetNameBuffer = current.Name ?? string.Empty;
+        }
+
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(160);
+        var defaultName = string.IsNullOrWhiteSpace(current.Name)
+            ? this.restockService.GetPresetDisplayName(current)
+            : "预设名称";
+        ImGui.InputTextWithHint("##presetName", defaultName, ref this.presetNameBuffer, 32);
+        if (ImGui.IsItemDeactivatedAfterEdit())
+        {
+            this.restockService.RenameCurrentPreset(this.presetNameBuffer);
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip("预设名称；留空时以预设中的第一件装备命名。");
+        }
+
+        ImGui.SameLine();
+        var cursorX = ImGui.GetCursorPosX();
+        if (ImGuiService.DrawIconButton(this.font, FontAwesomeIcon.Trash, ref cursorX, "删除当前预设"))
+        {
+            ImGui.OpenPopup("##deletePreset");
+        }
+
+        using var popup = ImRaii.Popup("##deletePreset");
+        if (!popup)
+        {
+            return;
+        }
+
+        ImGui.TextUnformatted($"确定删除预设「{this.restockService.GetPresetDisplayName(current)}」？");
+        ImGui.TextColored(ImGuiColors.DalamudGrey, "预设中的装备和价格会一并删除，无法恢复。");
+        if (ImGui.Button("删除", new Vector2(80, 0)))
+        {
+            this.restockService.DeleteCurrentPreset();
+            ImGui.CloseCurrentPopup();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("取消", new Vector2(80, 0)))
+        {
+            ImGui.CloseCurrentPopup();
+        }
     }
 
     private void DrawOptions()
@@ -350,6 +453,18 @@ public sealed class MannequinRestockWindow : ExtendedWindow
         if (this.restockService.IsPresetItemListed(item))
         {
             ImGui.TextColored(ImGuiColors.HealerGreen, "在售");
+            return;
+        }
+
+        var occupant = this.restockService.GetListedItemInSlot(item.EquipmentSlot);
+        if (occupant != null)
+        {
+            ImGui.TextColored(ImGuiColors.DalamudGrey, "已占用");
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip($"该槽位正在出售 {this.restockService.GetItemName(occupant.ItemId)}，与预设不同；补货不会替换它。");
+            }
+
             return;
         }
 
