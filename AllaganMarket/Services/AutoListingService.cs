@@ -53,6 +53,7 @@ public sealed class AutoListingService : IHostedService, IDisposable
     private readonly UndercutService undercutService;
     private readonly AutoUndercutService autoUndercutService;
     private readonly MannequinRestockService mannequinRestockService;
+    private readonly IAtkOrderService atkOrderService;
 
     private CancellationTokenSource? cancellationTokenSource;
     private int marketBoardRetryRequested;
@@ -67,7 +68,8 @@ public sealed class AutoListingService : IHostedService, IDisposable
         MarketPriceUpdaterService marketPriceUpdaterService,
         UndercutService undercutService,
         AutoUndercutService autoUndercutService,
-        MannequinRestockService mannequinRestockService)
+        MannequinRestockService mannequinRestockService,
+        IAtkOrderService atkOrderService)
     {
         this.framework = framework;
         this.gameGui = gameGui;
@@ -78,6 +80,7 @@ public sealed class AutoListingService : IHostedService, IDisposable
         this.undercutService = undercutService;
         this.autoUndercutService = autoUndercutService;
         this.mannequinRestockService = mannequinRestockService;
+        this.atkOrderService = atkOrderService;
     }
 
     public bool IsRunning { get; private set; }
@@ -143,6 +146,26 @@ public sealed class AutoListingService : IHostedService, IDisposable
         this.BeginRun(returnToRetainer ? $"开始批量收回给雇员：{count} 件。" : $"开始批量收回给自己：{count} 件。");
         this.pluginLog.Information($"Batch retract: returnToRetainer={returnToRetainer}, count={count}.");
         _ = this.RunRetractAsync(returnToRetainer, count, this.cancellationTokenSource!.Token);
+    }
+
+    public void StartRetractItem(uint itemId, bool isHq, bool returnToRetainer, int count)
+    {
+        if (this.IsRunning || !this.CheckNoOtherAutomation())
+        {
+            return;
+        }
+
+        if (this.characterMonitorService.ActiveRetainer == null)
+        {
+            this.StatusMessage = "请先打开雇员的出售品列表。";
+            return;
+        }
+
+        count = Math.Clamp(count, 1, MaxMarketSlots);
+        this.BeginRun($"开始批量撤回目标商品：{count} 组。");
+        this.pluginLog.Information(
+            $"Batch retract item: item {itemId} ({(isHq ? "HQ" : "NQ")}), returnToRetainer={returnToRetainer}, count={count}.");
+        _ = this.RunRetractItemAsync(itemId, isHq, returnToRetainer, count, this.cancellationTokenSource!.Token);
     }
 
     public void Cancel()
@@ -376,6 +399,159 @@ public sealed class AutoListingService : IHostedService, IDisposable
         {
             this.IsRunning = false;
         }
+    }
+
+    private async Task RunRetractItemAsync(
+        uint itemId,
+        bool isHq,
+        bool returnToRetainer,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        var retracted = 0;
+        var target = returnToRetainer ? "雇员" : "自己";
+        try
+        {
+            while (retracted < count)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!await this.WaitForAddon("RetainerSellList", cancellationToken, 10))
+                {
+                    this.StatusMessage = $"出售品列表已关闭，撤回中止（已撤回 {retracted}/{count} 组）。";
+                    return;
+                }
+
+                var row = await this.FindListedRow(itemId, isHq, cancellationToken);
+                if (row == null)
+                {
+                    this.StatusMessage = $"撤回结束：已撤回 {retracted}/{count} 组，出售列表中已无该商品。";
+                    return;
+                }
+
+                var remaining = await this.CountMarketItems();
+                if (!await this.SelectListedItem(row.Value) ||
+                    !await this.WaitForAddon("ContextMenu", cancellationToken, 20))
+                {
+                    this.StatusMessage = $"无法打开在售物品右键菜单（已撤回 {retracted}/{count} 组）。";
+                    return;
+                }
+
+                var entrySelected = returnToRetainer
+                    ? await this.SelectContextMenuEntry(["收回给雇员"], ["Return to Retainer"])
+                    : await this.SelectContextMenuEntry(["收回给自己"], ["Return to Inventory", "Take Back"]);
+                if (!entrySelected)
+                {
+                    this.StatusMessage = $"右键菜单中没有“收回给{target}”选项（已撤回 {retracted}/{count} 组）。";
+                    return;
+                }
+
+                var removed = false;
+                for (var wait = 0; wait < 30; wait++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await Task.Delay(100, cancellationToken);
+                    if (await this.CountMarketItems() < remaining)
+                    {
+                        removed = true;
+                        break;
+                    }
+                }
+
+                if (!removed)
+                {
+                    this.StatusMessage = $"撤回未生效，撤回中止（已撤回 {retracted}/{count} 组）；请检查背包或雇员的剩余空间。";
+                    return;
+                }
+
+                retracted++;
+                this.StatusMessage = $"已撤回给{target} {retracted}/{count} 组……";
+                this.pluginLog.Information($"Batch retract item: removed listing {retracted}/{count} of item {itemId}.");
+                await Task.Delay(300, cancellationToken);
+            }
+
+            this.StatusMessage = $"撤回目标商品给{target}完成：{retracted}/{count} 组。";
+        }
+        catch (OperationCanceledException)
+        {
+            this.StatusMessage = $"撤回已取消（已撤回 {retracted}/{count} 组）。";
+            this.pluginLog.Information("Batch retract item cancelled.");
+        }
+        catch (Exception ex)
+        {
+            this.StatusMessage = $"撤回失败（已撤回 {retracted}/{count} 组），请查看日志。";
+            this.pluginLog.Error($"Batch retract item failed: {ex}");
+        }
+        finally
+        {
+            this.IsRunning = false;
+        }
+    }
+
+    /// <summary>
+    /// Returns the RetainerSellList row showing a listing of the item, or null
+    /// when none is listed. The list rows are not in container slot order, so
+    /// the slot is mapped through the addon's own ordering; the lookup retries
+    /// until that ordering has caught up with the container after a removal.
+    /// </summary>
+    private async Task<int?> FindListedRow(uint itemId, bool isHq, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (found, row) = await this.framework.RunOnFrameworkThread<(bool Found, int? Row)>(() =>
+            {
+                unsafe
+                {
+                    var container = this.inventoryService.GetInventoryContainer(InventoryType.RetainerMarket);
+                    if (container == null || !container->IsLoaded)
+                    {
+                        return (false, null);
+                    }
+
+                    var order = this.atkOrderService.GetCurrentOrder();
+                    var listed = 0;
+                    int? matchingSlot = null;
+                    for (var index = 0; index < container->Size; index++)
+                    {
+                        var item = &container->Items[index];
+                        if (item->ItemId == 0)
+                        {
+                            continue;
+                        }
+
+                        listed++;
+                        if (matchingSlot == null &&
+                            item->ItemId == itemId &&
+                            item->Flags.HasFlag(InventoryItem.ItemFlags.HighQuality) == isHq)
+                        {
+                            matchingSlot = index;
+                        }
+                    }
+
+                    if (matchingSlot == null)
+                    {
+                        return (true, null);
+                    }
+
+                    if (order == null || order.Count != listed || !order.TryGetValue(matchingSlot.Value, out var menuIndex))
+                    {
+                        return (false, null);
+                    }
+
+                    return (true, menuIndex);
+                }
+            });
+
+            if (found)
+            {
+                return row;
+            }
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        throw new InvalidOperationException("The retainer sell list order did not match the market container.");
     }
 
     private Task<int> CountMarketItems()

@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2036] - 2026-10-10
+
+### Added
+- Batch retract by item: a "批量撤回目标商品" button next to "开始批量上架" takes back the item picked in the batch listing dropdown, as many stacks as the 组数 field says, returning them to the player inventory. Each listing's row is resolved through the sell list's own ordering, so only the chosen item (matching HQ/NQ) is touched. The dropdown now also offers items that are only on the market (shown with "[在售 N 组]"), so a fully listed item can still be picked.
+
 ## [1.4.0.2035] - 2026-10-01
 
 ### Fixed

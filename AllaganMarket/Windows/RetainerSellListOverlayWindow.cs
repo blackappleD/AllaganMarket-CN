@@ -315,7 +315,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
 
         if (candidates.Count == 0)
         {
-            ImGui.TextDisabled("背包中没有可上架的物品。");
+            ImGui.TextDisabled("背包和出售列表中都没有可上架的物品。");
         }
         else
         {
@@ -326,7 +326,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                 selectedIndex = 0;
                 this.batchListItemId = candidates[0].ItemId;
                 this.batchListIsHq = candidates[0].IsHq;
-                this.batchListStackCount = candidates[0].StackCount;
+                this.batchListStackCount = Math.Max(candidates[0].StackCount, candidates[0].ListedCount);
             }
 
             ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
@@ -361,7 +361,9 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                             {
                                 this.batchListItemId = candidates[index].ItemId;
                                 this.batchListIsHq = candidates[index].IsHq;
-                                this.batchListStackCount = candidates[index].StackCount;
+                                this.batchListStackCount = candidates[index].StackCount > 0
+                                    ? candidates[index].StackCount
+                                    : candidates[index].ListedCount;
                                 ImGui.CloseCurrentPopup();
                             }
                         }
@@ -386,6 +388,9 @@ public class RetainerSellListOverlayWindow : OverlayWindow
             }
         }
 
+        var selected = candidates.Find(
+            candidate => candidate.ItemId == this.batchListItemId && candidate.IsHq == this.batchListIsHq);
+
         if (this.autoListingService.IsRunning)
         {
             if (ImGui.Button("取消##batch-list-cancel"))
@@ -395,7 +400,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
         }
         else
         {
-            using (ImRaii.Disabled(candidates.Count == 0 || freeSlots == 0 || otherAutomationRunning))
+            using (ImRaii.Disabled(selected.StackCount == 0 || freeSlots == 0 || otherAutomationRunning))
             {
                 if (ImGui.Button("开始批量上架##batch-list-start"))
                 {
@@ -405,6 +410,28 @@ public class RetainerSellListOverlayWindow : OverlayWindow
                         this.batchListStackCount,
                         this.batchListRefreshPrice);
                 }
+            }
+
+            ImGui.SameLine();
+
+            using (ImRaii.Disabled(selected.ListedCount == 0 || otherAutomationRunning))
+            {
+                if (ImGui.Button("批量撤回目标商品##batch-retract-item"))
+                {
+                    this.autoListingService.StartRetractItem(
+                        this.batchListItemId,
+                        this.batchListIsHq,
+                        false,
+                        this.batchListStackCount);
+                }
+            }
+
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            {
+                ImGui.SetTooltip(
+                    selected.ListedCount == 0
+                        ? "出售列表中没有所选商品。"
+                        : $"把所选商品的 {Math.Min(this.batchListStackCount, selected.ListedCount)} 组在售品收回到背包（当前在售 {selected.ListedCount} 组）。");
             }
 
             using (ImRaii.Disabled(listedCount == 0 || otherAutomationRunning))
@@ -436,7 +463,7 @@ public class RetainerSellListOverlayWindow : OverlayWindow
         }
     }
 
-    private unsafe List<(uint ItemId, bool IsHq, int StackCount, string Label)> BuildInventoryCandidates()
+    private unsafe List<(uint ItemId, bool IsHq, int StackCount, int ListedCount, string Label)> BuildInventoryCandidates()
     {
         var stacks = new Dictionary<(uint ItemId, bool IsHq), (int StackCount, long Quantity)>();
         InventoryType[] playerInventories =
@@ -475,12 +502,35 @@ public class RetainerSellListOverlayWindow : OverlayWindow
             }
         }
 
+        // Listed items are offered too, so a fully listed item can still be
+        // picked for retraction.
+        var listedStacks = new Dictionary<(uint ItemId, bool IsHq), int>();
+        var marketContainer = this.inventoryService.GetInventoryContainer(InventoryType.RetainerMarket);
+        if (marketContainer != null && marketContainer->IsLoaded)
+        {
+            for (var index = 0; index < marketContainer->Size; index++)
+            {
+                var item = marketContainer->Items[index];
+                if (item.ItemId == 0)
+                {
+                    continue;
+                }
+
+                var key = (item.ItemId, item.Flags.HasFlag(InventoryItem.ItemFlags.HighQuality));
+                listedStacks[key] = listedStacks.GetValueOrDefault(key) + 1;
+                stacks.TryAdd(key, (0, 0L));
+            }
+        }
+
         return stacks
             .Select(pair =>
             {
                 var name = this.itemSheet.GetRowOrDefault(pair.Key.ItemId)?.Name.ExtractText() ?? this.localization.Get("Overlay.UnknownItem");
-                var label = $"{name}{(pair.Key.IsHq ? " (HQ)" : string.Empty)} ({pair.Value.Quantity})";
-                return (pair.Key.ItemId, pair.Key.IsHq, pair.Value.StackCount, Label: label);
+                var listedCount = listedStacks.GetValueOrDefault(pair.Key);
+                var label = $"{name}{(pair.Key.IsHq ? " (HQ)" : string.Empty)}" +
+                            (pair.Value.Quantity > 0 ? $" ({pair.Value.Quantity})" : string.Empty) +
+                            (listedCount > 0 ? $" [在售 {listedCount} 组]" : string.Empty);
+                return (pair.Key.ItemId, pair.Key.IsHq, pair.Value.StackCount, ListedCount: listedCount, Label: label);
             })
             .OrderBy(candidate => candidate.Label, StringComparer.Ordinal)
             .ToList();
