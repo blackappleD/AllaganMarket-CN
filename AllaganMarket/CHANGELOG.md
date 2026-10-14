@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2037] - 2026-10-15
+
+### Fixed
+- The retainer sell list overlay always showed "进入雇员后插件被重新加载" after the 2026-10-13 game patch: the container info packet hook signature no longer matched (the dispatcher now passes the opcode in esi instead of r14d), so the plugin never saw the retainer market inventory. Updated the signature.
+
 ## [1.4.0.2036] - 2026-10-10
 
 ### Added
