@@ -87,6 +87,7 @@ public class AllaganMarketPlugin : HostedPlugin
         typeof(AutoUndercutService),
         typeof(AutoListingService),
         typeof(MannequinRestockService),
+        typeof(IpcService),
     };
 
     public List<Type> GetHostedServices()

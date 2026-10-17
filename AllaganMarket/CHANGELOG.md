@@ -8,6 +8,12 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2038] - 2026-10-17
+
+### Added
+- IPC for other plugins to drive the automatic undercut: `AllaganMarket.AutoUndercut.Start` / `StartForRetainers` / `Cancel` / `IsRunning` / `IsBusy`, plus `Started` and `Finished` events. See `docs/ipc.md`.
+- The automatic undercut opens the retainer list itself when it is closed, by interacting with the nearest summoning bell in reach (city/inn bells within 4.6 yalms, housing bells within 6.5). It gives up when no bell is in reach or the player is busy.
+
 ## [1.4.0.2037] - 2026-10-15
 
 ### Fixed

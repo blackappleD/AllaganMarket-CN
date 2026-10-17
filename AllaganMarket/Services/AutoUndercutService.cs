@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,13 +12,19 @@ using AllaganMarket.Settings;
 
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 using Microsoft.Extensions.Hosting;
+
+using GameObjectStruct = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
 
 namespace AllaganMarket.Services;
 
@@ -26,10 +33,19 @@ namespace AllaganMarket.Services;
 /// </summary>
 public sealed class AutoUndercutService : IHostedService, IDisposable
 {
+    // EObj ids of the summoning bells in cities and inns.
+    private static readonly uint[] SummoningBellIds = [2000401, 2000441];
+
+    // Housing bells are furniture without those ids, so they are matched by their localized name.
+    private static readonly string[] SummoningBellNames =
+        ["传唤铃", "Summoning Bell", "呼び鈴", "Krämerklingel", "Sonnette"];
+
     private readonly IFramework framework;
     private readonly IGameGui gameGui;
     private readonly IAddonLifecycle addonLifecycle;
     private readonly IPluginLog pluginLog;
+    private readonly IObjectTable objectTable;
+    private readonly ICondition condition;
     private readonly ICharacterMonitorService characterMonitorService;
     private readonly MarketPriceUpdaterService marketPriceUpdaterService;
     private readonly SaleTrackerService saleTrackerService;
@@ -47,6 +63,8 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         IGameGui gameGui,
         IAddonLifecycle addonLifecycle,
         IPluginLog pluginLog,
+        IObjectTable objectTable,
+        ICondition condition,
         ICharacterMonitorService characterMonitorService,
         MarketPriceUpdaterService marketPriceUpdaterService,
         SaleTrackerService saleTrackerService,
@@ -59,6 +77,8 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.gameGui = gameGui;
         this.addonLifecycle = addonLifecycle;
         this.pluginLog = pluginLog;
+        this.objectTable = objectTable;
+        this.condition = condition;
         this.characterMonitorService = characterMonitorService;
         this.marketPriceUpdaterService = marketPriceUpdaterService;
         this.saleTrackerService = saleTrackerService;
@@ -67,6 +87,17 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.maximumAutoUndercutPercentageSetting = maximumAutoUndercutPercentageSetting;
         this.raisePriceWhenLowestSetting = raisePriceWhenLowestSetting;
     }
+
+    /// <summary>
+    /// Raised when a run begins, before the first retainer is opened.
+    /// </summary>
+    public event Action? Started;
+
+    /// <summary>
+    /// Raised when a run ends. The argument is true when every selected retainer was visited,
+    /// false when the run was cancelled or failed.
+    /// </summary>
+    public event Action<bool>? Finished;
 
     public bool IsRunning { get; private set; }
 
@@ -99,26 +130,36 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.cancellationTokenSource?.Dispose();
     }
 
-    public void Start()
+    public bool Start()
+    {
+        return this.Start(null);
+    }
+
+    /// <summary>
+    /// Starts repricing. With <paramref name="retainerIds"/> null the retainers whose auto-undercut box is ticked
+    /// are used; otherwise exactly the given retainers of the active character, regardless of the box.
+    /// </summary>
+    /// <returns>true when a run was started.</returns>
+    public bool Start(IReadOnlyCollection<ulong>? retainerIds)
     {
         if (this.IsRunning || !this.characterMonitorService.IsLoggedIn)
         {
-            return;
+            return false;
         }
 
         var activeCharacter = this.characterMonitorService.ActiveCharacter;
         if (activeCharacter == null)
         {
-            return;
+            return false;
         }
 
         var retainers = this.characterMonitorService.GetRetainers(activeCharacter.CharacterId)
-            .Where(retainer => this.IsAutoUndercutEnabled(retainer))
+            .Where(retainer => retainerIds?.Contains(retainer.CharacterId) ?? this.IsAutoUndercutEnabled(retainer))
             .OrderBy(retainer => retainer.DisplayOrder)
             .ToList();
         if (retainers.Count == 0)
         {
-            return;
+            return false;
         }
 
         this.cancellationTokenSource?.Cancel();
@@ -128,6 +169,22 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         this.pluginLog.Information(
             $"Automatic undercut: selected {retainers.Count} retainer(s): {string.Join(", ", retainers.Select(retainer => $"{retainer.Name} [{retainer.CharacterId}]"))}.");
         _ = this.RunAsync(retainers, this.cancellationTokenSource.Token);
+        return true;
+    }
+
+    /// <summary>
+    /// Number of the active character's retainers whose auto-undercut box is ticked.
+    /// </summary>
+    public int CountAutoUndercutRetainers()
+    {
+        var activeCharacter = this.characterMonitorService.ActiveCharacter;
+        if (!this.characterMonitorService.IsLoggedIn || activeCharacter == null)
+        {
+            return 0;
+        }
+
+        return this.characterMonitorService.GetRetainers(activeCharacter.CharacterId)
+            .Count(retainer => this.IsAutoUndercutEnabled(retainer));
     }
 
     public void Cancel()
@@ -146,10 +203,14 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
 
     private async Task RunAsync(IReadOnlyList<Character> retainers, CancellationToken cancellationToken)
     {
+        var completed = false;
+        this.Started?.Invoke();
         try
         {
-            if (!await this.WaitForAddon("RetainerList", cancellationToken))
+            if (!await this.EnsureRetainerListOpen(cancellationToken))
             {
+                this.pluginLog.Warning(
+                    "Automatic undercut: the retainer list is not open and no summoning bell in reach opened it.");
                 return;
             }
 
@@ -170,6 +231,8 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
                 await this.CloseRetainerWindows(cancellationToken);
                 await Task.Delay(400, cancellationToken);
             }
+
+            completed = true;
         }
         catch (OperationCanceledException)
         {
@@ -182,7 +245,116 @@ public sealed class AutoUndercutService : IHostedService, IDisposable
         finally
         {
             this.IsRunning = false;
+            this.Finished?.Invoke(completed);
         }
+    }
+
+    /// <summary>
+    /// Makes sure RetainerList is open, interacting with a summoning bell in reach when it is not.
+    /// </summary>
+    private async Task<bool> EnsureRetainerListOpen(CancellationToken cancellationToken)
+    {
+        if (await this.IsAddonReady("RetainerList"))
+        {
+            return true;
+        }
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!await this.framework.RunOnFrameworkThread(this.InteractWithSummoningBell))
+            {
+                // No usable bell: keep waiting briefly in case the caller is opening it themselves.
+                return await this.WaitForAddon("RetainerList", cancellationToken);
+            }
+
+            for (var wait = 0; wait < 50; wait++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (await this.IsAddonReady("RetainerList"))
+                {
+                    // The rows are filled in a few frames after the window becomes visible.
+                    await Task.Delay(500, cancellationToken);
+                    return true;
+                }
+
+                await Task.Delay(100, cancellationToken);
+            }
+
+            this.pluginLog.Warning(
+                $"Automatic undercut: the summoning bell did not open the retainer list (attempt {attempt + 1}/2).");
+        }
+
+        return false;
+    }
+
+    private bool InteractWithSummoningBell()
+    {
+        var player = this.objectTable.LocalPlayer;
+        if (player == null ||
+            this.condition[ConditionFlag.OccupiedSummoningBell] ||
+            this.condition[ConditionFlag.OccupiedInQuestEvent] ||
+            this.condition[ConditionFlag.OccupiedInEvent] ||
+            this.condition[ConditionFlag.InCombat] ||
+            this.condition[ConditionFlag.BetweenAreas] ||
+            this.condition[ConditionFlag.Casting])
+        {
+            this.pluginLog.Information("Automatic undercut: the player is busy; not using a summoning bell.");
+            return false;
+        }
+
+        IGameObject? bell = null;
+        var bellDistance = float.MaxValue;
+        foreach (var gameObject in this.objectTable)
+        {
+            if (!gameObject.IsTargetable || !IsSummoningBell(gameObject))
+            {
+                continue;
+            }
+
+            // Interaction ranges used by AutoRetainer: housing bells reach further than city/inn bells.
+            var reach = gameObject.ObjectKind == ObjectKind.HousingEventObject ? 6.5f : 4.6f;
+            var distance = Vector3.Distance(player.Position, gameObject.Position);
+            if (distance <= reach && distance < bellDistance)
+            {
+                bell = gameObject;
+                bellDistance = distance;
+            }
+        }
+
+        if (bell == null)
+        {
+            this.pluginLog.Information("Automatic undercut: no summoning bell within reach.");
+            return false;
+        }
+
+        unsafe
+        {
+            var targetSystem = TargetSystem.Instance();
+            if (targetSystem == null)
+            {
+                return false;
+            }
+
+            var bellObject = (GameObjectStruct*)bell.Address;
+            targetSystem->Target = bellObject;
+            targetSystem->InteractWithObject(bellObject, false);
+        }
+
+        this.pluginLog.Information(
+            $"Automatic undercut: interacting with the summoning bell {bellDistance:F1} yalms away.");
+        return true;
+    }
+
+    private static bool IsSummoningBell(IGameObject gameObject)
+    {
+        return gameObject.ObjectKind switch
+        {
+            ObjectKind.EventObj => SummoningBellIds.Contains(gameObject.BaseId) ||
+                                   SummoningBellNames.Contains(gameObject.Name.TextValue),
+            ObjectKind.HousingEventObject => SummoningBellNames.Contains(gameObject.Name.TextValue),
+            _ => false,
+        };
     }
 
     private async Task<bool> OpenRetainer(Character retainer, CancellationToken cancellationToken)
