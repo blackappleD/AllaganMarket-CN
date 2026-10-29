@@ -8,6 +8,11 @@ Instead the changelog reader and automation surrounding plugin PRs will add the 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.html).
 
+## [1.4.0.2039] - 2026-10-29
+
+### Fixed
+- Closing the setup wizard with "关闭，不再显示" now sticks: the current feature versions are marked as seen, so the wizard no longer reopens on the next login. Before, only the "show new features" flag was cleared, and the wizard kept reopening because no version had ever been recorded as seen.
+
 ## [1.4.0.2038] - 2026-10-17
 
 ### Added
