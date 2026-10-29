@@ -233,6 +233,12 @@ public class LocalizedWizardWidget<T>
     private void Close(bool showNextTime)
     {
         this.configuration.ShowWizardNewFeatures = showNextTime;
+        if (!showNextTime)
+        {
+            // Boot reopens the wizard while no version is marked seen, so the flag alone isn't enough.
+            this.configurationWizardService.MarkFeaturesSeen();
+        }
+
         this.OnClosed?.Invoke();
     }
 
